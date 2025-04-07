@@ -1,0 +1,2107 @@
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Modal,
+  Button,
+  List,
+  InputNumber,
+  message,
+  Spin,
+  Badge,
+  Upload,
+} from "antd";
+import {
+  AudioOutlined,
+  AudioMutedOutlined,
+  ShoppingCartOutlined,
+  PrinterOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
+
+const VoiceControlModal = ({
+  isVisible,
+  onClose,
+  onAddToCart,
+  onPrintBill,
+  searchMedicine,
+}) => {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [processingCommand, setProcessingCommand] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedMedicine, setSelectedMedicine] = useState(null);
+  const [quantity, setQuantity] = useState(1);
+  const [cart, setCart] = useState([]);
+  const [voiceThreshold, setVoiceThreshold] = useState(20);
+  const [apiStatus, setApiStatus] = useState("unknown");
+
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const listeningIntervalRef = useRef(null);
+  const silenceTimeoutRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const streamRef = useRef(null);
+
+  // Initialize audio context and analyzer for voice activity detection
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        audioContextRef.current = new (window.AudioContext ||
+          window.webkitAudioContext)();
+        analyserRef.current = audioContextRef.current.createAnalyser();
+        analyserRef.current.minDecibels = -45;
+        analyserRef.current.maxDecibels = -10;
+        analyserRef.current.smoothingTimeConstant = 0.2;
+        console.log("Audio context initialized successfully");
+      } catch (err) {
+        console.error("Failed to initialize audio context:", err);
+        setFeedback(
+          "Error initializing audio system. Please check browser compatibility."
+        );
+      }
+    }
+
+    return () => {
+      cleanup();
+    };
+  }, []);
+
+  // Test API connection when modal opens
+  useEffect(() => {
+    if (isVisible) {
+      testApiConnection();
+    }
+  }, [isVisible]);
+
+  // Test API connection
+  const testApiConnection = async () => {
+    try {
+      setApiStatus("checking");
+      setFeedback("Checking API connection...");
+
+      // Try to call the health endpoint if available
+      const response = await fetch("/api/health", {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (response.ok) {
+        console.log("API connection successful");
+        setApiStatus("connected");
+        setFeedback("API connection successful. Ready for voice commands.");
+      } else {
+        console.error("API health check failed:", response.status);
+        setApiStatus("error");
+        setFeedback(
+          "Warning: API connection test failed. Voice commands may not work properly."
+        );
+      }
+    } catch (error) {
+      console.error("Error connecting to API:", error);
+      setApiStatus("disconnected");
+      setFeedback(
+        "Error: Cannot connect to API. Voice commands will not work."
+      );
+    }
+  };
+
+  // Cleanup function for audio resources
+  const cleanup = () => {
+    if (listeningIntervalRef.current) {
+      clearInterval(listeningIntervalRef.current);
+      listeningIntervalRef.current = null;
+    }
+
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks();
+      tracks.forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      try {
+        audioContextRef.current.close();
+      } catch (e) {
+        console.error("Error closing audio context:", e);
+      }
+    }
+  };
+
+  // Text-to-speech feedback
+  const speak = (text) => {
+    if ("speechSynthesis" in window) {
+      try {
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        window.speechSynthesis.speak(utterance);
+      } catch (error) {
+        console.error("Speech synthesis error:", error);
+      }
+    }
+  };
+
+  // Improved voice activity detection with adaptive threshold
+  const detectVoiceActivity = (analyser) => {
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(dataArray);
+
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+      sum += dataArray[i];
+    }
+
+    const average = sum / bufferLength;
+
+    // Adapt threshold based on ambient noise
+    if (!detectVoiceActivity.noiseFloor) {
+      detectVoiceActivity.noiseFloor = average;
+    } else if (average < detectVoiceActivity.noiseFloor * 1.5) {
+      // Only adapt when likely not speaking
+      detectVoiceActivity.noiseFloor =
+        detectVoiceActivity.noiseFloor * 0.95 + average * 0.05;
+    }
+
+    // Use adaptive threshold with minimum floor
+    const adaptiveThreshold = Math.max(
+      15,
+      detectVoiceActivity.noiseFloor * 1.5
+    );
+
+    // Update threshold state occasionally for display purposes
+    if (Math.random() < 0.05) {
+      setVoiceThreshold(Math.round(adaptiveThreshold));
+    }
+
+    return average > adaptiveThreshold;
+  };
+
+  // Start continuous listening with intelligent chunking based on voice activity
+  const startContinuousListening = async () => {
+    if (apiStatus === "disconnected" || apiStatus === "error") {
+      message.error(
+        "API connection is not available. Voice commands will not work."
+      );
+      setFeedback(
+        "Cannot start listening: API connection unavailable. Please check your network and server."
+      );
+      return;
+    }
+
+    try {
+      // Reset any existing state
+      if (streamRef.current) {
+        const tracks = streamRef.current.getTracks();
+        tracks.forEach((track) => track.stop());
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      streamRef.current = stream;
+
+      const audioContext = audioContextRef.current;
+
+      // Resume audio context if it's suspended (browser autoplay policy)
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+
+      const analyser = analyserRef.current;
+
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      // Check if MediaRecorder is supported
+      if (typeof MediaRecorder === "undefined") {
+        throw new Error("MediaRecorder is not supported in this browser");
+      }
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : "audio/ogg",
+      });
+
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      // Handle recording errors
+      mediaRecorder.onerror = (event) => {
+        console.error("MediaRecorder error:", event.error);
+        setFeedback(
+          `Recording error: ${
+            event.error.message || "Unknown error"
+          }. Try restarting.`
+        );
+        stopContinuousListening();
+      };
+
+      // Start recording
+      mediaRecorder.start(100); // Collect chunks every 100ms
+
+      let isSpeaking = false;
+      let silenceStartTime = null;
+      let consecutiveSilenceCount = 0;
+      let consecutiveSpeakingCount = 0;
+
+      // Continuously monitor voice activity
+      listeningIntervalRef.current = setInterval(() => {
+        try {
+          const hasVoice = detectVoiceActivity(analyser);
+
+          if (hasVoice) {
+            consecutiveSpeakingCount++;
+            consecutiveSilenceCount = 0;
+          } else {
+            consecutiveSilenceCount++;
+            consecutiveSpeakingCount = 0;
+          }
+
+          // Require multiple consecutive samples to change state (debouncing)
+          const isActuallySpeaking = consecutiveSpeakingCount >= 3;
+          const isActuallySilent = consecutiveSilenceCount >= 5;
+
+          if (isActuallySpeaking && !isSpeaking) {
+            // Voice started
+            isSpeaking = true;
+            silenceStartTime = null;
+            setFeedback("Voice detected, listening...");
+          } else if (isActuallySilent && isSpeaking) {
+            // Voice stopped - start silence counter
+            if (silenceStartTime === null) {
+              silenceStartTime = Date.now();
+            } else if (Date.now() - silenceStartTime > 1800) {
+              // 1.8 seconds of silence
+              // Process the current audio chunk
+              isSpeaking = false;
+              silenceStartTime = null;
+
+              if (audioChunksRef.current.length > 0) {
+                processCurrentAudioChunk();
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error in voice monitoring:", error);
+        }
+      }, 100);
+
+      setIsListening(true);
+      setFeedback("Continuous listening active. Speak a command.");
+      speak("Listening. Speak a command");
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      setFeedback(
+        `Error: ${error.message}. Please check microphone permissions.`
+      );
+      message.error(
+        "Microphone access denied. Please check your browser permissions."
+      );
+    }
+  };
+
+  // Process the current audio chunk
+  const processCurrentAudioChunk = async () => {
+    if (processingCommand) return; // Don't process if already processing
+
+    if (audioChunksRef.current.length === 0) return;
+
+    setProcessingCommand(true);
+    setFeedback("Processing your command...");
+
+    let audioType = "audio/webm";
+    if (!MediaRecorder.isTypeSupported("audio/webm")) {
+      audioType = "audio/ogg";
+    }
+
+    const audioBlob = new Blob(audioChunksRef.current, { type: audioType });
+    audioChunksRef.current = []; // Reset for next utterance
+
+    // Debug audio size
+    console.log(
+      `Processing audio chunk: ${(audioBlob.size / 1024).toFixed(2)} KB`
+    );
+
+    try {
+      await transcribeAudio(audioBlob);
+    } catch (error) {
+      console.error("Error processing audio chunk:", error);
+      setFeedback(`Error processing: ${error.message}`);
+    } finally {
+      setProcessingCommand(false);
+    }
+  };
+
+  // Stop continuous listening
+  const stopContinuousListening = () => {
+    if (listeningIntervalRef.current) {
+      clearInterval(listeningIntervalRef.current);
+      listeningIntervalRef.current = null;
+    }
+
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.error("Error stopping media recorder:", e);
+      }
+    }
+
+    if (streamRef.current) {
+      const tracks = streamRef.current.getTracks();
+      tracks.forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    setIsListening(false);
+    setFeedback("Voice listening stopped");
+  };
+
+  // Toggle continuous listening
+  const toggleListening = () => {
+    if (isListening) {
+      stopContinuousListening();
+    } else {
+      startContinuousListening();
+    }
+  };
+
+  // Function to transcribe audio using Whisper API
+  const transcribeAudio = async (audioBlob) => {
+    try {
+      // Create FormData and append audio file
+      const formData = new FormData();
+      formData.append("file", audioBlob, "audio.wav");
+      formData.append("model", "whisper-1");
+
+      setFeedback("Sending audio to API...");
+
+      // Log request being sent
+      console.log("Sending transcription request to API");
+
+      // Call Whisper API (through backend proxy)
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      console.log("API response status:", response.status);
+
+      if (!response.ok) {
+        let errorText = "Unknown error";
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          // Ignore errors when trying to get error text
+        }
+
+        console.error("API Error:", errorText);
+        throw new Error(
+          `Failed to transcribe audio: ${response.status} ${errorText}`
+        );
+      }
+
+      const data = await response.json();
+      console.log("Transcription result:", data);
+      const transcriptText = data.text || "";
+
+      if (transcriptText.trim()) {
+        setTranscript(transcriptText);
+        await processTranscribedCommand(transcriptText);
+      } else {
+        setFeedback("No speech detected in audio. Please try again.");
+      }
+    } catch (error) {
+      console.error("Transcription error:", error);
+      setApiStatus("error");
+      setFeedback(
+        `Error transcribing audio: ${error.message}. Please check network connection and API configuration.`
+      );
+    }
+  };
+
+  // Predict and process command with error correction
+  const processTranscribedCommand = async (command) => {
+    const originalCommand = command;
+    let lowerCommand = command.toLowerCase().trim();
+
+    // Command prediction/correction logic
+    const commandPatterns = {
+      search: [/^search\s+/i, /^find\s+/i, /^look\s+for\s+/i, /^searching\s+/i],
+      select: [
+        /^select\s+/i,
+        /^choose\s+/i,
+        /^pick\s+/i,
+        /^item\s+/i,
+        /^number\s+/i,
+      ],
+      quantity: [
+        /^quantity\s+/i,
+        /^amount\s+/i,
+        /^set\s+quantity\s+/i,
+        /^qty\s+/i,
+      ],
+      addToCart: [/add\s+to\s+cart/i, /put\s+in\s+cart/i, /add\s+item/i],
+      clearCart: [/clear\s+cart/i, /empty\s+cart/i, /remove\s+all/i],
+      printBill: [
+        /print\s+bill/i,
+        /checkout/i,
+        /print\s+receipt/i,
+        /finalize/i,
+        /finish/i,
+      ],
+      help: [/help/i, /commands/i, /what\s+can\s+i\s+say/i],
+      exit: [/exit/i, /close/i, /quit/i],
+    };
+
+    // Determine command category
+    let commandType = null;
+    let commandParams = command;
+
+    for (const [type, patterns] of Object.entries(commandPatterns)) {
+      for (const pattern of patterns) {
+        if (pattern.test(lowerCommand)) {
+          commandType = type;
+          // Extract the parameter part
+          commandParams = lowerCommand.replace(pattern, "").trim();
+          break;
+        }
+      }
+      if (commandType) break;
+    }
+
+    // Fuzzy matching for common command errors
+    if (!commandType) {
+      // Check for partial matches or common misspellings
+      if (/^s[a-z]*\s+/.test(lowerCommand) || lowerCommand.includes("find")) {
+        commandType = "search";
+        commandParams = lowerCommand.replace(/^s[a-z]*\s+/, "").trim();
+      } else if (
+        /^sel|cho|pic|num/i.test(lowerCommand) &&
+        /\d+/.test(lowerCommand)
+      ) {
+        commandType = "select";
+        commandParams = lowerCommand.match(/\d+/)[0];
+      } else if (
+        /quant|amount|many|qty/i.test(lowerCommand) &&
+        /\d+/.test(lowerCommand)
+      ) {
+        commandType = "quantity";
+        commandParams = lowerCommand.match(/\d+/)[0];
+      } else if (/add|cart|basket/i.test(lowerCommand)) {
+        commandType = "addToCart";
+      } else if (/clear|empty|remove all/i.test(lowerCommand)) {
+        commandType = "clearCart";
+      } else if (/print|bill|check|receip|fin/i.test(lowerCommand)) {
+        commandType = "printBill";
+      }
+    }
+
+    // Feedback about command prediction
+    if (commandType) {
+      setFeedback(
+        `Recognized command: "${commandType}" ${
+          commandParams ? `with parameters: "${commandParams}"` : ""
+        }`
+      );
+    } else {
+      setFeedback(
+        `Didn't recognize a command in: "${originalCommand}". Please try again or say "help".`
+      );
+      speak("Didn't recognize that command. Please try again or say help");
+      return;
+    }
+
+    // Process the command based on the identified type
+    try {
+      switch (commandType) {
+        case "search":
+          if (commandParams) {
+            setFeedback(`Searching for ${commandParams}...`);
+            speak(`Searching for ${commandParams}`);
+            try {
+              const results = await searchMedicine(commandParams);
+              if (results && results.length > 0) {
+                setSearchResults(results);
+                setFeedback(
+                  `Found ${results.length} results for ${commandParams}`
+                );
+                speak(`Found ${results.length} results for ${commandParams}`);
+              } else {
+                setSearchResults([]);
+                setFeedback(`No results found for ${commandParams}`);
+                speak(`No results found for ${commandParams}`);
+              }
+            } catch (error) {
+              console.error("Search error:", error);
+              setFeedback(`Error searching for medicine: ${error.message}`);
+              speak(`Error searching for medicine`);
+            }
+          }
+          break;
+
+        case "select":
+          const itemNumber = parseInt(commandParams);
+          if (
+            !isNaN(itemNumber) &&
+            itemNumber > 0 &&
+            itemNumber <= searchResults.length
+          ) {
+            const selected = searchResults[itemNumber - 1];
+            setSelectedMedicine(selected);
+            setFeedback(
+              `Selected ${selected.name}. Say "quantity" followed by a number to set quantity.`
+            );
+            speak(
+              `Selected ${selected.name}. Say quantity followed by a number`
+            );
+          } else {
+            setFeedback(
+              `Please select a valid item number between 1 and ${searchResults.length}`
+            );
+            speak(
+              `Please select a valid item number between 1 and ${searchResults.length}`
+            );
+          }
+          break;
+
+        case "quantity":
+          const qty = parseInt(commandParams);
+          if (!isNaN(qty) && qty > 0) {
+            setQuantity(qty);
+            setFeedback(
+              `Quantity set to ${qty}. Say "add to cart" to continue.`
+            );
+            speak(`Quantity set to ${qty}. Say add to cart to continue`);
+          } else {
+            setFeedback(`Invalid quantity. Please try again.`);
+            speak(`Invalid quantity. Please try again`);
+          }
+          break;
+
+        case "addToCart":
+          if (selectedMedicine) {
+            const cartItem = {
+              ...selectedMedicine,
+              quantity,
+              total: selectedMedicine.price * quantity,
+            };
+            setCart([...cart, cartItem]);
+            onAddToCart(cartItem);
+            setFeedback(`Added ${quantity} ${selectedMedicine.name} to cart`);
+            speak(`Added ${quantity} ${selectedMedicine.name} to cart`);
+            // Reset for next item
+            setSelectedMedicine(null);
+            setQuantity(1);
+          } else {
+            setFeedback(
+              `No medicine selected. Please search and select a medicine first.`
+            );
+            speak(
+              `No medicine selected. Please search and select a medicine first`
+            );
+          }
+          break;
+
+        case "clearCart":
+          setCart([]);
+          setFeedback("Cart cleared");
+          speak("Cart cleared");
+          break;
+
+        case "printBill":
+          if (cart.length > 0) {
+            onPrintBill(cart);
+            setFeedback("Printing bill...");
+            speak("Printing bill");
+          } else {
+            setFeedback("Cart is empty. Nothing to print.");
+            speak("Cart is empty. Nothing to print");
+          }
+          break;
+
+        case "help":
+          const helpText =
+            'Available commands: "search [medicine name]", "select [number]", "quantity [number]", "add to cart", "clear cart", "print bill", or "exit"';
+          setFeedback(helpText);
+          speak(
+            "Available commands include: search medicine name, select number, quantity number, add to cart, clear cart, print bill, or exit"
+          );
+          break;
+
+        case "exit":
+          onClose();
+          setFeedback("Closing voice control");
+          speak("Closing voice control");
+          break;
+
+        default:
+          setFeedback(
+            `Unrecognized command. Say "help" for available commands.`
+          );
+          speak("Unrecognized command. Say help for available commands");
+      }
+    } catch (error) {
+      console.error("Error processing command:", error);
+      setFeedback(`Error processing command: ${error.message}`);
+      speak("Error processing command");
+    }
+  };
+
+  // Function to manually submit audio file for transcription
+  const uploadAudioFile = {
+    beforeUpload: (file) => {
+      const supportedTypes = [
+        "audio/wav",
+        "audio/mp3",
+        "audio/mpeg",
+        "audio/webm",
+        "audio/ogg",
+      ];
+      const isAudioFile = supportedTypes.includes(file.type);
+
+      if (!isAudioFile) {
+        message.error(`${file.name} is not a supported audio file`);
+        return Upload.LIST_IGNORE;
+      }
+
+      if (apiStatus === "disconnected" || apiStatus === "error") {
+        message.error(
+          "API connection is not available. Cannot process audio file."
+        );
+        setFeedback("Cannot process audio: API connection unavailable.");
+        return Upload.LIST_IGNORE;
+      }
+
+      // Manually handle the file
+      const reader = new FileReader();
+      reader.readAsArrayBuffer(file);
+      reader.onload = async () => {
+        try {
+          setFeedback(`Processing audio file: ${file.name}...`);
+          const arrayBuffer = reader.result;
+          const audioBlob = new Blob([arrayBuffer], { type: file.type });
+
+          // Process file
+          setProcessingCommand(true);
+          await transcribeAudio(audioBlob);
+        } catch (error) {
+          console.error("Error processing audio file:", error);
+          setFeedback(`Error processing audio file: ${error.message}`);
+        } finally {
+          setProcessingCommand(false);
+        }
+      };
+
+      reader.onerror = () => {
+        message.error(`Failed to read ${file.name}`);
+      };
+
+      return false; // Prevent automatic upload
+    },
+  };
+
+  return (
+    <Modal
+      title={
+        <div className="flex items-center justify-between">
+          <span>Voice Control - Audica POS (Continuous Whisper AI)</span>
+          <div className="flex items-center">
+            {apiStatus === "connected" ? (
+              <Badge status="success" text="API Connected" className="mr-4" />
+            ) : apiStatus === "error" ? (
+              <Badge status="error" text="API Error" className="mr-4" />
+            ) : apiStatus === "disconnected" ? (
+              <Badge
+                status="default"
+                text="API Disconnected"
+                className="mr-4"
+              />
+            ) : (
+              <Badge
+                status="processing"
+                text="Checking API..."
+                className="mr-4"
+              />
+            )}
+            <Button
+              type={isListening ? "primary" : "default"}
+              icon={isListening ? <AudioOutlined /> : <AudioMutedOutlined />}
+              onClick={toggleListening}
+              danger={isListening}
+              disabled={apiStatus === "disconnected" || apiStatus === "error"}
+            >
+              {isListening ? "Stop Listening" : "Start Listening"}
+            </Button>
+          </div>
+        </div>
+      }
+      open={isVisible}
+      onCancel={onClose}
+      footer={[
+        <Button
+          key="retry"
+          onClick={testApiConnection}
+          disabled={apiStatus === "checking"}
+        >
+          {apiStatus === "checking" ? "Checking..." : "Check API Connection"}
+        </Button>,
+        <Upload {...uploadAudioFile} key="upload" showUploadList={false}>
+          <Button
+            icon={<UploadOutlined />}
+            disabled={apiStatus === "disconnected" || apiStatus === "error"}
+          >
+            Upload Audio
+          </Button>
+        </Upload>,
+        <Button key="help" onClick={() => processTranscribedCommand("help")}>
+          Show Commands
+        </Button>,
+        <Button
+          key="clear"
+          onClick={() => processTranscribedCommand("clear cart")}
+        >
+          Clear Cart
+        </Button>,
+        <Button
+          key="print"
+          type="primary"
+          icon={<PrinterOutlined />}
+          onClick={() => processTranscribedCommand("print bill")}
+          disabled={cart.length === 0}
+        >
+          Print Bill
+        </Button>,
+      ]}
+      width={700}
+    >
+      <div className="space-y-4">
+        {/* Feedback and status section */}
+        <div className="p-3 bg-blue-50 rounded-lg">
+          <div className="font-semibold text-lg mb-2">
+            {isListening ? (
+              <Badge
+                status="processing"
+                text="Continuously listening for commands..."
+              />
+            ) : processingCommand ? (
+              <Badge status="warning" text="Processing command..." />
+            ) : (
+              <Badge status="default" text="Listening inactive" />
+            )}
+          </div>
+          <div className="text-gray-700">
+            {processingCommand ? (
+              <div className="flex items-center">
+                <Spin size="small" className="mr-2" /> Processing...
+              </div>
+            ) : (
+              feedback ||
+              "Click 'Start Listening' to begin continuous voice recognition"
+            )}
+          </div>
+
+          {transcript && (
+            <div className="mt-2 p-2 bg-white rounded border text-gray-600">
+              <div className="font-semibold">Whisper transcription:</div>
+              <div className="italic">{transcript}</div>
+            </div>
+          )}
+
+          {isListening && (
+            <div className="mt-2 text-xs text-gray-500">
+              Voice detection threshold: {voiceThreshold} (adaptive)
+            </div>
+          )}
+        </div>
+
+        {/* Search results section */}
+        {searchResults.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Search Results:</h3>
+            <List
+              size="small"
+              bordered
+              dataSource={searchResults}
+              renderItem={(item, index) => (
+                <List.Item
+                  className={
+                    selectedMedicine && selectedMedicine.id === item.id
+                      ? "bg-blue-50"
+                      : ""
+                  }
+                  onClick={() => {
+                    setSelectedMedicine(item);
+                    setFeedback(
+                      `Selected ${item.name}. Say "quantity" followed by a number to set quantity.`
+                    );
+                  }}
+                >
+                  <div className="flex w-full justify-between">
+                    <span className="font-medium">
+                      {index + 1}. {item.name}
+                    </span>
+                    <span>${item.price.toFixed(2)}</span>
+                  </div>
+                </List.Item>
+              )}
+            />
+          </div>
+        )}
+
+        {/* Selected medicine and quantity section */}
+        {selectedMedicine && (
+          <div className="p-3 bg-green-50 rounded-lg mt-4">
+            <h3 className="font-medium">Selected Item:</h3>
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="font-medium">{selectedMedicine.name}</div>
+                <div className="text-sm text-gray-600">
+                  ${selectedMedicine.price.toFixed(2)} each
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="mr-2">Quantity:</span>
+                <InputNumber
+                  min={1}
+                  value={quantity}
+                  onChange={(value) => setQuantity(value)}
+                  onPressEnter={() => {
+                    if (selectedMedicine) {
+                      const cartItem = {
+                        ...selectedMedicine,
+                        quantity,
+                        total: selectedMedicine.price * quantity,
+                      };
+                      setCart([...cart, cartItem]);
+                      onAddToCart(cartItem);
+                    }
+                  }}
+                />
+                <Button
+                  type="primary"
+                  icon={<ShoppingCartOutlined />}
+                  className="ml-2"
+                  onClick={() => processTranscribedCommand("add to cart")}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cart summary section */}
+        {cart.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Cart Summary:</h3>
+            <List
+              size="small"
+              bordered
+              dataSource={cart}
+              renderItem={(item, index) => (
+                <List.Item>
+                  <div className="flex w-full justify-between">
+                    <span>
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span>${item.total.toFixed(2)}</span>
+                  </div>
+                </List.Item>
+              )}
+              footer={
+                <div className="flex justify-between font-medium">
+                  <span>Total:</span>
+                  <span>
+                    $
+                    {cart.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
+                  </span>
+                </div>
+              }
+            />
+          </div>
+        )}
+
+        {/* Help section with available commands */}
+        <div className="mt-4 text-sm bg-gray-50 p-3 rounded-lg">
+          <h3 className="font-medium mb-1">Available Voice Commands:</h3>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>"Search [medicine name]" - Search for a medicine</li>
+            <li>"Select [number]" - Select an item from search results</li>
+            <li>"Quantity [number]" - Set the quantity</li>
+            <li>"Add to cart" - Add selected item to cart</li>
+            <li>"Clear cart" - Remove all items from cart</li>
+            <li>"Print bill" - Finalize and print receipt</li>
+            <li>"Help" - Show available commands</li>
+            <li>"Exit" - Close voice control</li>
+          </ul>
+        </div>
+
+        {/* Advanced settings collapsible panel */}
+        <div className="mt-4">
+          <details className="text-sm">
+            <summary className="cursor-pointer font-medium">
+              Advanced Settings
+            </summary>
+            <div className="p-3 mt-2 bg-gray-50 rounded-lg">
+              <div className="mb-3">
+                <div className="font-medium mb-1">
+                  Voice Detection Sensitivity:
+                </div>
+                <div className="flex items-center">
+                  <span className="mr-2">Low</span>
+                  <input
+                    type="range"
+                    min="5"
+                    max="50"
+                    value={voiceThreshold}
+                    onChange={(e) =>
+                      setVoiceThreshold(parseInt(e.target.value))
+                    }
+                    className="flex-1"
+                  />
+                  <span className="ml-2">High</span>
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Current threshold: {voiceThreshold} (lower value = more
+                  sensitive)
+                </div>
+              </div>
+
+              <div>
+                <div className="font-medium mb-1">API Connection Status:</div>
+                <div>
+                  {apiStatus === "connected" ? (
+                    <div className="text-green-600">
+                      ✓ API Connected and working
+                    </div>
+                  ) : apiStatus === "error" ? (
+                    <div className="text-red-600">
+                      ✗ API Connected but returning errors
+                    </div>
+                  ) : apiStatus === "disconnected" ? (
+                    <div className="text-red-600">✗ API Disconnected</div>
+                  ) : (
+                    <div className="text-blue-600">
+                      • Testing API connection...
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+export default VoiceControlModal;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useState, useEffect, useRef } from "react";
+import { Modal, Button, List, InputNumber, message, Spin, Badge } from "antd";
+import {
+  AudioOutlined,
+  AudioMutedOutlined,
+  ShoppingCartOutlined,
+  PrinterOutlined,
+  DeleteOutlined,
+} from "@ant-design/icons";
+import Fuse from "fuse.js"; // Import Fuse.js for fuzzy matching
+
+const VoiceControlModal = ({
+  isVisible,
+  onClose,
+  onAddToCart,
+  onPrintBill,
+  searchMedicine,
+  medicineList, // Complete list of medicines in the system
+}) => {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [processingCommand, setProcessingCommand] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedMedicine, setSelectedMedicine] = useState(null);
+  const [quantity, setQuantity] = useState(1);
+  const [cart, setCart] = useState([]);
+  const [lastCommand, setLastCommand] = useState("");
+  const [originalTranscript, setOriginalTranscript] = useState("");
+  const [correctedTranscript, setCorrectedTranscript] = useState("");
+  const [debugInfo, setDebugInfo] = useState(null); // For debugging recognition issues
+
+  const recognitionRef = useRef(null);
+  const isComponentMounted = useRef(true);
+  const fuseRef = useRef(null); // Ref for Fuse instance
+
+  // Initialize fuzzy search when medicine list is available
+  useEffect(() => {
+    if (medicineList && medicineList.length > 0) {
+      // Configure Fuse with medicine names
+      fuseRef.current = new Fuse(medicineList, {
+        keys: ["name"], // assuming each medicine has a 'name' property
+        includeScore: true,
+        threshold: 0.5, // Lower values = stricter matching
+        minMatchCharLength: 3,
+      });
+    }
+  }, [medicineList]);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    isComponentMounted.current = true;
+
+    if (typeof window !== "undefined") {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (SpeechRecognition) {
+        try {
+          recognitionRef.current = new SpeechRecognition();
+          recognitionRef.current.continuous = true;
+          recognitionRef.current.interimResults = false;
+          recognitionRef.current.lang = "en-US";
+          recognitionRef.current.maxAlternatives = 5; // Get more alternatives for better number recognition
+
+          recognitionRef.current.onresult = (event) => {
+            if (!isComponentMounted.current) return;
+
+            const current = event.resultIndex;
+            const alternatives = [];
+            let bestTranscript = "";
+            let bestScore = 0;
+
+            // Collect all alternatives for analysis
+            for (let i = 0; i < event.results[current].length; i++) {
+              const alternative = event.results[current][i].transcript.trim();
+              const confidence = event.results[current][i].confidence;
+              alternatives.push({ text: alternative, confidence });
+
+              // First prioritize transcripts with numbers
+              const hasNumber =
+                /\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b/i.test(
+                  alternative
+                );
+
+              if (
+                hasNumber &&
+                (bestTranscript === "" || confidence > bestScore)
+              ) {
+                bestTranscript = alternative;
+                bestScore = confidence;
+              }
+            }
+
+            // If no alternatives with numbers, take the most confident one
+            if (bestTranscript === "" && alternatives.length > 0) {
+              bestTranscript = alternatives.sort(
+                (a, b) => b.confidence - a.confidence
+              )[0].text;
+            }
+
+            setDebugInfo({ alternatives, selected: bestTranscript });
+            setOriginalTranscript(bestTranscript); // Store original
+            const improvedTranscript = improveTranscription(bestTranscript);
+            setCorrectedTranscript(improvedTranscript);
+            setTranscript(improvedTranscript);
+            processVoiceCommand(improvedTranscript);
+          };
+
+          recognitionRef.current.onerror = (event) => {
+            if (!isComponentMounted.current) return;
+
+            console.error("Speech recognition error:", event.error);
+            setFeedback(`Error: ${event.error}. Please try again.`);
+            speak(`Error: ${event.error}. Please try again.`);
+
+            if (event.error !== "no-speech") {
+              setIsListening(false);
+            }
+          };
+
+          recognitionRef.current.onend = () => {
+            if (!isComponentMounted.current) return;
+
+            if (isListening && recognitionRef.current) {
+              try {
+                setTimeout(() => {
+                  if (isListening && isComponentMounted.current) {
+                    recognitionRef.current.start();
+                  }
+                }, 300); // Reduced delay for better continuity
+              } catch (error) {
+                console.error("Failed to restart speech recognition:", error);
+                setIsListening(false);
+                setFeedback(
+                  "Voice recognition stopped unexpectedly. Click to resume."
+                );
+              }
+            }
+          };
+        } catch (error) {
+          console.error("Error initializing speech recognition:", error);
+          setFeedback("Failed to initialize speech recognition.");
+          message.error("Failed to initialize speech recognition.");
+        }
+      } else {
+        setFeedback("Speech recognition is not supported in this browser.");
+        message.error("Speech recognition is not supported in this browser.");
+      }
+    }
+
+    return () => {
+      isComponentMounted.current = false;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          console.error("Error stopping speech recognition:", error);
+        }
+      }
+    };
+  }, []);
+
+  // Enhanced function to improve transcription with domain knowledge
+  const improveTranscription = (text) => {
+    if (!text) return text;
+
+    // Specific number word normalization (handle common mistranscriptions)
+    let normalized = text
+      .toLowerCase()
+      .replace(/\bwon\b/g, "one")
+      .replace(/\btoo\b/g, "two")
+      .replace(/\bto\b/g, "two")
+      .replace(/\bfor\b/g, "four")
+      .replace(/\bsix\s+is\b/g, "six")
+      .replace(/\band\b/g, "1"); // Sometimes "and" is recognized instead of "1"
+
+    // 1. Extract intent and potential medicine name
+    const parts = normalized.split(/\s+/);
+
+    // Common intents in pharmacy context
+    const intentKeywords = {
+      search: ["search", "find", "look for", "lookup"],
+      select: ["select", "choose", "pick", "get", "item", "number"],
+      quantity: ["quantity", "amount", "how many"],
+      addToCart: ["add to cart", "add it", "put in cart"],
+      clearCart: ["clear cart", "empty cart", "remove all"],
+      printBill: [
+        "print bill",
+        "checkout",
+        "print receipt",
+        "finish",
+        "complete",
+      ],
+      help: ["help", "commands", "what can i say"],
+      exit: ["exit", "close", "quit"],
+    };
+
+    // Detect intent
+    let detectedIntent = null;
+    for (const [intent, keywords] of Object.entries(intentKeywords)) {
+      for (const keyword of keywords) {
+        if (normalized.includes(keyword)) {
+          detectedIntent = intent;
+          break;
+        }
+      }
+      if (detectedIntent) break;
+    }
+
+    // Special handling for pure number commands (likely item selection)
+    const wordToNumber = {
+      one: "1",
+      two: "2",
+      three: "3",
+      four: "4",
+      five: "5",
+      six: "6",
+      seven: "7",
+      eight: "8",
+      nine: "9",
+      ten: "10",
+    };
+
+    // If this is just a number word, convert it to a "select" command
+    if (!detectedIntent) {
+      for (const [word, number] of Object.entries(wordToNumber)) {
+        if (normalized === word) {
+          return `select ${number}`;
+        }
+      }
+
+      // If it's just a digit, convert to select command
+      if (/^\d+$/.test(normalized)) {
+        return `select ${normalized}`;
+      }
+    }
+
+    // If detected intent is quantity and there's a number word, convert it to digits
+    if (detectedIntent === "quantity") {
+      for (const [word, number] of Object.entries(wordToNumber)) {
+        const regex = new RegExp(`\\b${word}\\b`, "g");
+        normalized = normalized.replace(regex, number);
+      }
+    }
+
+    // 2. If this is a search intent, try fuzzy matching
+    if (detectedIntent === "search" && fuseRef.current) {
+      // Extract medicine name by removing the intent keyword
+      const searchTerm = normalized
+        .replace(/^(search|find|look for|lookup)\s+/i, "")
+        .trim();
+
+      if (searchTerm) {
+        const results = fuseRef.current.search(searchTerm);
+        if (results.length > 0 && results[0].score < 0.4) {
+          // Threshold for confidence
+          const correctedName = results[0].item.name;
+          // Replace the misheard medicine name with the corrected one
+          return text.replace(searchTerm, correctedName);
+        }
+      }
+    }
+
+    return normalized; // Return normalized transcript
+  };
+
+  // Watch isListening state and handle speech recognition accordingly
+  useEffect(() => {
+    if (!recognitionRef.current) return;
+
+    if (isListening) {
+      try {
+        recognitionRef.current.start();
+        setFeedback('Listening... Say a command like "search panadol"');
+        speak('Listening. Say a command like "search panadol"');
+      } catch (error) {
+        console.error("Error starting speech recognition:", error);
+        setFeedback(`Could not start voice recognition: ${error.message}`);
+        setIsListening(false);
+      }
+    } else {
+      try {
+        recognitionRef.current.stop();
+        setFeedback("Voice recognition paused. Click to resume.");
+      } catch (error) {
+        console.error("Error stopping speech recognition:", error);
+      }
+    }
+  }, [isListening]);
+
+  // Text-to-speech feedback
+  const speak = (text) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.1;
+      utterance.pitch = 1.0;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const toggleListening = () => {
+    setIsListening(!isListening);
+  };
+
+  // Completely rewritten number extraction function with better recognition
+  const extractNumber = (text) => {
+    if (!text) return null;
+
+    const lowerText = text.toLowerCase();
+
+    // Dictionary for word-to-number conversion with common mistranscriptions
+    const wordToNumber = {
+      zero: 0,
+      one: 1,
+      won: 1,
+      1: 1,
+      two: 2,
+      too: 2,
+      to: 2,
+      2: 2,
+      three: 3,
+      3: 3,
+      free: 3,
+      four: 4,
+      for: 4,
+      4: 4,
+      five: 5,
+      5: 5,
+      six: 6,
+      6: 6,
+      sex: 6, // common mistranscription
+      seven: 7,
+      7: 7,
+      eight: 8,
+      8: 8,
+      nine: 9,
+      9: 9,
+      ten: 10,
+      10: 10,
+      eleven: 11,
+      11: 11,
+      twelve: 12,
+      12: 12,
+      thirteen: 13,
+      13: 13,
+      fourteen: 14,
+      14: 14,
+      fifteen: 15,
+      15: 15,
+      sixteen: 16,
+      16: 16,
+      seventeen: 17,
+      17: 17,
+      eighteen: 18,
+      18: 18,
+      nineteen: 19,
+      19: 19,
+      twenty: 20,
+      20: 20,
+      thirty: 30,
+      30: 30,
+      forty: 40,
+      40: 40,
+      fifty: 50,
+      50: 50,
+      sixty: 60,
+      60: 60,
+      seventy: 70,
+      70: 70,
+      eighty: 80,
+      80: 80,
+      ninety: 90,
+      90: 90,
+    };
+
+    // First check if the entire text is just a number or number word
+    if (wordToNumber[lowerText] !== undefined) {
+      return wordToNumber[lowerText];
+    }
+
+    // Match "quantity X" pattern
+    const quantityMatch = lowerText.match(
+      /\b(?:quantity|amount)\s+(\w+|\d+)\b/i
+    );
+    if (quantityMatch && wordToNumber[quantityMatch[1]] !== undefined) {
+      return wordToNumber[quantityMatch[1]];
+    }
+
+    // Match "select X" pattern
+    const selectMatch = lowerText.match(
+      /\b(?:select|choose|pick|item|number)\s+(\w+|\d+)\b/i
+    );
+    if (selectMatch && wordToNumber[selectMatch[1]] !== undefined) {
+      return wordToNumber[selectMatch[1]];
+    }
+
+    // Match any digit(s)
+    const digitMatch = lowerText.match(/\b(\d+)\b/);
+    if (digitMatch) {
+      return parseInt(digitMatch[1], 10);
+    }
+
+    // Try to find number words in the text
+    const words = lowerText.split(/\s+/);
+    for (const word of words) {
+      if (wordToNumber[word] !== undefined) {
+        return wordToNumber[word];
+      }
+    }
+
+    // Check for standalone number words
+    if (words.length === 1 && wordToNumber[words[0]] !== undefined) {
+      return wordToNumber[words[0]];
+    }
+
+    return null; // No number found
+  };
+
+  const processVoiceCommand = async (command) => {
+    if (!command || command.trim() === "") return;
+
+    setLastCommand(command);
+    setProcessingCommand(true);
+    const lowerCommand = command.toLowerCase().trim();
+
+    try {
+      // First check if this is a pure number command (highly likely item selection)
+      const numericCommand =
+        /^\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*$/i.test(
+          lowerCommand
+        );
+
+      if (numericCommand && searchResults.length > 0) {
+        const itemNumber = extractNumber(lowerCommand);
+        if (
+          itemNumber !== null &&
+          itemNumber > 0 &&
+          itemNumber <= searchResults.length
+        ) {
+          const selected = searchResults[itemNumber - 1];
+          setSelectedMedicine(selected);
+          setFeedback(
+            `Selected ${selected.name}. Say "quantity" followed by a number to set quantity.`
+          );
+          speak(`Selected ${selected.name}. Say quantity followed by a number`);
+          setProcessingCommand(false);
+          return;
+        }
+      }
+
+      // Direct number command - if we're expecting a selection
+      if (searchResults.length > 0) {
+        const itemNumber = extractNumber(lowerCommand);
+        if (
+          itemNumber !== null &&
+          itemNumber > 0 &&
+          itemNumber <= searchResults.length
+        ) {
+          // This looks like a direct item selection
+          const selected = searchResults[itemNumber - 1];
+          setSelectedMedicine(selected);
+          setFeedback(
+            `Selected ${selected.name}. Say "quantity" followed by a number to set quantity.`
+          );
+          speak(`Selected ${selected.name}. Say quantity followed by a number`);
+          setProcessingCommand(false);
+          return;
+        }
+      }
+
+      // Command: Search for medicine
+      if (
+        lowerCommand.startsWith("search") ||
+        lowerCommand.startsWith("find") ||
+        lowerCommand.startsWith("look for")
+      ) {
+        const searchTerm = lowerCommand
+          .replace(/^(search|find|look for)\s+/i, "")
+          .trim();
+        if (searchTerm) {
+          setFeedback(`Searching for ${searchTerm}...`);
+          speak(`Searching for ${searchTerm}`);
+
+          // If we have Fuse initialized, try to find the best medicine match first
+          let optimizedSearchTerm = searchTerm;
+          if (fuseRef.current) {
+            const fuzzyResults = fuseRef.current.search(searchTerm);
+            if (fuzzyResults.length > 0 && fuzzyResults[0].score < 0.4) {
+              // Use the best match if it's confident enough
+              optimizedSearchTerm = fuzzyResults[0].item.name;
+              console.log(
+                `Fuzzy matched: "${searchTerm}" → "${optimizedSearchTerm}"`
+              );
+            }
+          }
+
+          const results = await searchMedicine(optimizedSearchTerm);
+          if (results && results.length > 0) {
+            setSearchResults(results);
+            if (optimizedSearchTerm !== searchTerm) {
+              setFeedback(
+                `Found ${results.length} results for "${optimizedSearchTerm}" (you said "${searchTerm}")`
+              );
+              speak(
+                `Found ${results.length} results for ${optimizedSearchTerm}`
+              );
+            } else {
+              setFeedback(
+                `Found ${results.length} results for "${searchTerm}"`
+              );
+              speak(`Found ${results.length} results for ${searchTerm}`);
+            }
+          } else {
+            setSearchResults([]);
+            setFeedback(`No results found for "${searchTerm}"`);
+            speak(`No results found for ${searchTerm}`);
+          }
+        }
+      }
+      // Command: Select a medicine
+      else if (
+        lowerCommand.includes("select") ||
+        lowerCommand.includes("choose") ||
+        lowerCommand.includes("pick") ||
+        lowerCommand.includes("item")
+      ) {
+        const itemNumber = extractNumber(lowerCommand);
+
+        if (
+          itemNumber !== null &&
+          itemNumber > 0 &&
+          itemNumber <= searchResults.length
+        ) {
+          const selected = searchResults[itemNumber - 1];
+          setSelectedMedicine(selected);
+          setFeedback(
+            `Selected ${selected.name}. Say "quantity" followed by a number to set quantity.`
+          );
+          speak(`Selected ${selected.name}. Say quantity followed by a number`);
+        } else {
+          setFeedback(
+            `Please select a valid item number between 1 and ${searchResults.length}`
+          );
+          speak(
+            `Please select a valid item number between 1 and ${searchResults.length}`
+          );
+        }
+      }
+      // Command: Set quantity
+      else if (
+        lowerCommand.includes("quantity") ||
+        lowerCommand.includes("amount") ||
+        lowerCommand.includes("how many")
+      ) {
+        const qty = extractNumber(lowerCommand);
+
+        if (qty !== null && qty > 0) {
+          setQuantity(qty);
+          setFeedback(`Quantity set to ${qty}. Say "add to cart" to continue.`);
+          speak(`Quantity set to ${qty}. Say add to cart to continue`);
+        } else {
+          setFeedback(`Invalid quantity. Please try again.`);
+          speak(`Invalid quantity. Please try again`);
+        }
+      }
+      // Command: Add to cart
+      else if (
+        lowerCommand.includes("add to cart") ||
+        lowerCommand.includes("add it") ||
+        lowerCommand.includes("put in cart")
+      ) {
+        if (selectedMedicine) {
+          const cartItem = {
+            ...selectedMedicine,
+            quantity,
+            total: selectedMedicine.price * quantity,
+          };
+          setCart([...cart, cartItem]);
+          onAddToCart(cartItem);
+          setFeedback(`Added ${quantity} ${selectedMedicine.name} to cart`);
+          speak(`Added ${quantity} ${selectedMedicine.name} to cart`);
+          // Reset for next item
+          setSelectedMedicine(null);
+          setQuantity(1);
+        } else {
+          setFeedback(
+            `No medicine selected. Please search and select a medicine first.`
+          );
+          speak(
+            `No medicine selected. Please search and select a medicine first`
+          );
+        }
+      }
+      // Command: Clear cart
+      else if (
+        lowerCommand.includes("clear cart") ||
+        lowerCommand.includes("empty cart") ||
+        lowerCommand.includes("remove all")
+      ) {
+        setCart([]);
+        setFeedback("Cart cleared");
+        speak("Cart cleared");
+      }
+      // Command: Print bill
+      else if (
+        lowerCommand.includes("print bill") ||
+        lowerCommand.includes("checkout") ||
+        lowerCommand.includes("print receipt") ||
+        lowerCommand.includes("finish") ||
+        lowerCommand.includes("complete")
+      ) {
+        if (cart.length > 0) {
+          onPrintBill(cart);
+          setFeedback("Printing bill...");
+          speak("Printing bill");
+        } else {
+          setFeedback("Cart is empty. Nothing to print.");
+          speak("Cart is empty. Nothing to print");
+        }
+      }
+      // Command: Help
+      else if (
+        lowerCommand.includes("help") ||
+        lowerCommand.includes("commands") ||
+        lowerCommand.includes("what can i say")
+      ) {
+        const helpText =
+          'Available commands: "search [medicine name]", "select [number]", "quantity [number]", "add to cart", "clear cart", "print bill", or "exit"';
+        setFeedback(helpText);
+        speak(
+          "Available commands include: search medicine name, select number, quantity number, add to cart, clear cart, print bill, or exit"
+        );
+      }
+      // Command: Exit
+      else if (
+        lowerCommand.includes("exit") ||
+        lowerCommand.includes("close") ||
+        lowerCommand.includes("quit")
+      ) {
+        onClose();
+        setFeedback("Closing voice control");
+        speak("Closing voice control");
+      }
+      // Unrecognized command
+      else {
+        setFeedback(
+          `Unrecognized command: "${command}". Say "help" for available commands.`
+        );
+        speak("Unrecognized command. Say help for available commands");
+      }
+    } catch (error) {
+      console.error("Error processing command:", error);
+      setFeedback(`Error processing command: ${error.message}`);
+      speak("Error processing command");
+    }
+
+    setProcessingCommand(false);
+  };
+
+  // UI click handlers for selection
+  const handleSelectItem = (item) => {
+    setSelectedMedicine(item);
+    setFeedback(
+      `Selected ${item.name}. Say "quantity" followed by a number to set quantity.`
+    );
+  };
+
+  const handleAddToCart = () => {
+    if (selectedMedicine) {
+      const cartItem = {
+        ...selectedMedicine,
+        quantity,
+        total: selectedMedicine.price * quantity,
+      };
+      setCart([...cart, cartItem]);
+      onAddToCart(cartItem);
+      setFeedback(`Added ${quantity} ${selectedMedicine.name} to cart`);
+      // Reset for next item
+      setSelectedMedicine(null);
+      setQuantity(1);
+    }
+  };
+
+  const handleRemoveFromCart = (index) => {
+    const newCart = [...cart];
+    newCart.splice(index, 1);
+    setCart(newCart);
+    setFeedback("Item removed from cart");
+  };
+
+  // Safely close the modal
+  const handleClose = () => {
+    // First stop listening
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (error) {
+        console.error("Error stopping speech recognition on close:", error);
+      }
+    }
+    setIsListening(false);
+
+    // Then call the close callback
+    onClose();
+  };
+
+  return (
+    <Modal
+      title={
+        <div className="flex items-center justify-between">
+          <span>Voice Control - Audica POS</span>
+          <Button
+            type={isListening ? "primary" : "default"}
+            icon={isListening ? <AudioOutlined /> : <AudioMutedOutlined />}
+            onClick={toggleListening}
+            danger={!isListening}
+            className="ml-4"
+          >
+            {isListening ? "Listening Active" : "Start Listening"}
+          </Button>
+        </div>
+      }
+      open={isVisible}
+      onCancel={handleClose}
+      footer={[
+        <Button key="help" onClick={() => processVoiceCommand("help")}>
+          Show Commands
+        </Button>,
+        <Button
+          key="clear"
+          onClick={() => processVoiceCommand("clear cart")}
+          disabled={cart.length === 0}
+        >
+          Clear Cart
+        </Button>,
+        <Button
+          key="print"
+          type="primary"
+          icon={<PrinterOutlined />}
+          onClick={() => processVoiceCommand("print bill")}
+          disabled={cart.length === 0}
+        >
+          Print Bill
+        </Button>,
+        <Button key="close" onClick={handleClose}>
+          Close
+        </Button>,
+      ]}
+      width={700}
+    >
+      <div className="space-y-4">
+        {/* Feedback and status section */}
+        <div className="p-3 bg-blue-50 rounded-lg">
+          <div className="font-semibold text-lg mb-2">
+            {isListening ? (
+              <Badge status="processing" text="Listening for commands..." />
+            ) : (
+              <Badge status="default" text="Voice recognition paused" />
+            )}
+          </div>
+          <div className="text-gray-700">
+            {processingCommand ? (
+              <div className="flex items-center">
+                <Spin size="small" className="mr-2" /> Processing...
+              </div>
+            ) : (
+              feedback || "Ready for voice commands"
+            )}
+          </div>
+
+          {transcript && (
+            <div className="mt-2 p-2 bg-white rounded border text-gray-600">
+              <div className="font-semibold">I heard:</div>
+              <div className="italic">{transcript}</div>
+              {originalTranscript !== transcript && (
+                <div className="text-xs text-gray-500 mt-1">
+                  <div>Original: {originalTranscript}</div>
+                  <div>Corrected: {correctedTranscript}</div>
+                </div>
+              )}
+              {debugInfo && (
+                <div className="text-xs text-gray-500 mt-1 border-t pt-1">
+                  <details>
+                    <summary>Recognition details (debug)</summary>
+                    <div>
+                      <strong>Alternatives:</strong>
+                      <ol className="ml-4">
+                        {debugInfo.alternatives.map((alt, i) => (
+                          <li key={i}>
+                            {alt.text} (confidence:{" "}
+                            {(alt.confidence * 100).toFixed(1)}%)
+                            {alt.text === debugInfo.selected && " ⭐"}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  </details>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Search results section */}
+        {searchResults.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Search Results:</h3>
+            <List
+              size="small"
+              bordered
+              dataSource={searchResults}
+              renderItem={(item, index) => (
+                <List.Item
+                  className={
+                    selectedMedicine && selectedMedicine.id === item.id
+                      ? "bg-blue-50"
+                      : ""
+                  }
+                  onClick={() => handleSelectItem(item)}
+                >
+                  <div className="flex w-full justify-between">
+                    <span className="font-medium">
+                      {index + 1}. {item.name}
+                    </span>
+                    <span>${item.price.toFixed(2)}</span>
+                  </div>
+                </List.Item>
+              )}
+            />
+            <div className="mt-2 text-sm text-gray-600">
+              Say "select [number]" or just say the number (like "one" or "1")
+              to select an item
+            </div>
+          </div>
+        )}
+
+        {/* Selected medicine and quantity section */}
+        {selectedMedicine && (
+          <div className="p-3 bg-green-50 rounded-lg mt-4">
+            <h3 className="font-medium">Selected Item:</h3>
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="font-medium">{selectedMedicine.name}</div>
+                <div className="text-sm text-gray-600">
+                  ${selectedMedicine.price.toFixed(2)} each
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="mr-2">Quantity:</span>
+                <InputNumber
+                  min={1}
+                  value={quantity}
+                  onChange={(value) => setQuantity(value)}
+                  onPressEnter={handleAddToCart}
+                />
+                <Button
+                  type="primary"
+                  icon={<ShoppingCartOutlined />}
+                  className="ml-2"
+                  onClick={handleAddToCart}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cart summary section */}
+        {cart.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Cart Summary:</h3>
+            <List
+              size="small"
+              bordered
+              dataSource={cart}
+              renderItem={(item, index) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      icon={<DeleteOutlined />}
+                      size="small"
+                      danger
+                      onClick={() => handleRemoveFromCart(index)}
+                    />,
+                  ]}
+                >
+                  <div className="flex w-full justify-between">
+                    <span>
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span>${item.total.toFixed(2)}</span>
+                  </div>
+                </List.Item>
+              )}
+              footer={
+                <div className="flex justify-between font-medium">
+                  <span>Total:</span>
+                  <span>
+                    $
+                    {cart.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
+                  </span>
+                </div>
+              }
+            />
+          </div>
+        )}
+        {/* Command help section */}
+        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <h3 className="font-medium mb-2">Voice Commands:</h3>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div>
+              <div className="font-medium">Search:</div>
+              <div>"Search [medicine name]"</div>
+              <div>"Find [medicine name]"</div>
+            </div>
+            <div>
+              <div className="font-medium">Select:</div>
+              <div>"Select [number]"</div>
+              <div>Or just say the number</div>
+            </div>
+            <div>
+              <div className="font-medium">Quantity:</div>
+              <div>"Quantity [number]"</div>
+              <div>"Amount [number]"</div>
+            </div>
+            <div>
+              <div className="font-medium">Cart:</div>
+              <div>"Add to cart"</div>
+              <div>"Clear cart"</div>
+              <div>"Print bill"</div>
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-gray-500">
+            Tip: You can say "Help" at any time to see this list of commands
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+export default VoiceControlModal;
+
+
+
+
+
+
+
+
+
+
+
+

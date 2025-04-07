@@ -1,0 +1,93 @@
+// Audio transcription endpoint using OpenAI Whisper API
+app.post('/api/transcribe', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No audio file provided' });
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'OpenAI API key not configured on server' });
+  }
+
+  try {
+    // Log request information
+    console.log(`Processing transcription request for file: ${req.file.originalname} (${req.file.size} bytes)`);
+    
+    // Create form data for OpenAI API request
+    const formData = new FormData();
+    formData.append('file', fs.createReadStream(req.file.path), req.file.filename);
+    formData.append('model', 'whisper-1');
+    
+    // Optional parameters
+    if (req.body.language) {
+      formData.append('language', req.body.language);
+    }
+    
+    if (req.body.response_format) {
+      formData.append('response_format', req.body.response_format);
+    } else {
+      formData.append('response_format', 'json');
+    }
+    
+    // Make request to OpenAI Whisper API
+    const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+      headers: {
+        ...formData.getHeaders(),
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      timeout: 30000 // 30 seconds timeout
+    });
+    
+    // Log success
+    console.log(`Transcription successful: ${response.data.text.substring(0, 50)}${response.data.text.length > 50 ? '...' : ''}`);
+    
+    // Clean up temp file
+    fs.unlink(req.file.path, (err) => {
+      if (err) console.error(`Error deleting temp file: ${err.message}`);
+    });
+    
+    // Return transcription result
+    return res.status(200).json(response.data);
+    
+  } catch (error) {
+    console.error('Transcription error:', error);
+    
+    // Clean up temp file even on error
+    if (req.file && req.file.path) {
+      fs.unlink(req.file.path, (err) => {
+        if (err) console.error(`Error deleting temp file: ${err.message}`);
+      });
+    }
+    
+    // Determine appropriate error response
+    let errorMessage = 'Failed to transcribe audio';
+    let statusCode = 500;
+    
+    if (error.response) {
+      // OpenAI API error response
+      errorMessage = error.response.data.error?.message || 'API error';
+      statusCode = error.response.status;
+      console.error('API error details:', JSON.stringify(error.response.data));
+    } else if (error.request) {
+      // No response received
+      errorMessage = 'No response from transcription service';
+      console.error('No response from API');
+    } else {
+      // Request setup error
+      errorMessage = error.message || 'Unknown error';
+      console.error('Request error:', error.message);
+    }
+    
+    return res.status(statusCode).json({ 
+      error: errorMessage,
+      status: statusCode 
+    });
+  }
+});
+
+
+
+
+
+
+
+

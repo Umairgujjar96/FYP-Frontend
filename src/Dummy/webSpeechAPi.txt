@@ -1,0 +1,452 @@
+import React, { useState, useEffect, useRef } from "react";
+import { Modal, Button, List, InputNumber, message, Spin, Badge } from "antd";
+import {
+  AudioOutlined,
+  AudioMutedOutlined,
+  ShoppingCartOutlined,
+  PrinterOutlined,
+} from "@ant-design/icons";
+
+const VoiceControlModal = ({
+  isVisible,
+  onClose,
+  onAddToCart,
+  onPrintBill,
+  searchMedicine,
+}) => {
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [processingCommand, setProcessingCommand] = useState(false);
+  const [feedback, setFeedback] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedMedicine, setSelectedMedicine] = useState(null);
+  const [quantity, setQuantity] = useState(1);
+  const [cart, setCart] = useState([]);
+
+  const recognitionRef = useRef(null);
+
+  // Initialize speech recognition
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Browser compatibility check
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
+
+        recognitionRef.current.onresult = (event) => {
+          const current = event.resultIndex;
+          const transcriptText = event.results[current][0].transcript;
+          setTranscript(transcriptText);
+
+          // Process final results
+          if (event.results[current].isFinal) {
+            processVoiceCommand(transcriptText);
+          }
+        };
+
+        recognitionRef.current.onerror = (event) => {
+          console.error("Speech recognition error:", event.error);
+          setFeedback(`Error: ${event.error}. Please try again.`);
+          speak(`Error: ${event.error}. Please try again.`);
+        };
+      } else {
+        setFeedback("Speech recognition is not supported in this browser.");
+        message.error("Speech recognition is not supported in this browser.");
+      }
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  // Text-to-speech feedback
+  const speak = (text) => {
+    if ("speechSynthesis" in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current.stop();
+      setFeedback("Voice recognition paused. Click to resume.");
+    } else {
+      recognitionRef.current.start();
+      setFeedback('Listening... Say a command like "search panadol"');
+      speak('Listening. Say a command like "search panadol"');
+    }
+    setIsListening(!isListening);
+  };
+
+  const processVoiceCommand = async (command) => {
+    setProcessingCommand(true);
+    const lowerCommand = command.toLowerCase().trim();
+    setFeedback(`Processing: "${command}"`);
+
+    try {
+      // Command: Search for medicine
+      if (
+        lowerCommand.startsWith("search") ||
+        lowerCommand.startsWith("find")
+      ) {
+        const searchTerm = lowerCommand
+          .replace(/^(search|find)\s+/i, "")
+          .trim();
+        if (searchTerm) {
+          setFeedback(`Searching for ${searchTerm}...`);
+          speak(`Searching for ${searchTerm}`);
+          const results = await searchMedicine(searchTerm);
+          if (results && results.length > 0) {
+            setSearchResults(results);
+            setFeedback(`Found ${results.length} results for ${searchTerm}`);
+            speak(`Found ${results.length} results for ${searchTerm}`);
+          } else {
+            setSearchResults([]);
+            setFeedback(`No results found for ${searchTerm}`);
+            speak(`No results found for ${searchTerm}`);
+          }
+        }
+      }
+      // Command: Select a medicine
+      else if (
+        lowerCommand.startsWith("select") ||
+        lowerCommand.startsWith("choose")
+      ) {
+        const itemNumber = parseInt(
+          lowerCommand.replace(/^(select|choose)\s+/i, "").trim()
+        );
+        if (
+          !isNaN(itemNumber) &&
+          itemNumber > 0 &&
+          itemNumber <= searchResults.length
+        ) {
+          const selected = searchResults[itemNumber - 1];
+          setSelectedMedicine(selected);
+          setFeedback(
+            `Selected ${selected.name}. Say "quantity" followed by a number to set quantity.`
+          );
+          speak(`Selected ${selected.name}. Say quantity followed by a number`);
+        } else {
+          setFeedback(
+            `Please select a valid item number between 1 and ${searchResults.length}`
+          );
+          speak(
+            `Please select a valid item number between 1 and ${searchResults.length}`
+          );
+        }
+      }
+      // Command: Set quantity
+      else if (lowerCommand.startsWith("quantity")) {
+        const qtyMatch = lowerCommand.match(/quantity\s+(\d+)/i);
+        if (qtyMatch && qtyMatch[1]) {
+          const qty = parseInt(qtyMatch[1]);
+          if (!isNaN(qty) && qty > 0) {
+            setQuantity(qty);
+            setFeedback(
+              `Quantity set to ${qty}. Say "add to cart" to continue.`
+            );
+            speak(`Quantity set to ${qty}. Say add to cart to continue`);
+          } else {
+            setFeedback(`Invalid quantity. Please try again.`);
+            speak(`Invalid quantity. Please try again`);
+          }
+        }
+      }
+      // Command: Add to cart
+      else if (lowerCommand.includes("add to cart")) {
+        if (selectedMedicine) {
+          const cartItem = {
+            ...selectedMedicine,
+            quantity,
+            total: selectedMedicine.price * quantity,
+          };
+          setCart([...cart, cartItem]);
+          onAddToCart(cartItem);
+          setFeedback(`Added ${quantity} ${selectedMedicine.name} to cart`);
+          speak(`Added ${quantity} ${selectedMedicine.name} to cart`);
+          // Reset for next item
+          setSelectedMedicine(null);
+          setQuantity(1);
+        } else {
+          setFeedback(
+            `No medicine selected. Please search and select a medicine first.`
+          );
+          speak(
+            `No medicine selected. Please search and select a medicine first`
+          );
+        }
+      }
+      // Command: Clear cart
+      else if (lowerCommand.includes("clear cart")) {
+        setCart([]);
+        setFeedback("Cart cleared");
+        speak("Cart cleared");
+      }
+      // Command: Print bill
+      else if (
+        lowerCommand.includes("print bill") ||
+        lowerCommand.includes("checkout")
+      ) {
+        if (cart.length > 0) {
+          onPrintBill(cart);
+          setFeedback("Printing bill...");
+          speak("Printing bill");
+        } else {
+          setFeedback("Cart is empty. Nothing to print.");
+          speak("Cart is empty. Nothing to print");
+        }
+      }
+      // Command: Help
+      else if (
+        lowerCommand.includes("help") ||
+        lowerCommand.includes("commands")
+      ) {
+        const helpText =
+          'Available commands: "search [medicine name]", "select [number]", "quantity [number]", "add to cart", "clear cart", "print bill", or "exit"';
+        setFeedback(helpText);
+        speak(
+          "Available commands include: search medicine name, select number, quantity number, add to cart, clear cart, print bill, or exit"
+        );
+      }
+      // Command: Exit
+      else if (
+        lowerCommand.includes("exit") ||
+        lowerCommand.includes("close")
+      ) {
+        onClose();
+        setFeedback("Closing voice control");
+        speak("Closing voice control");
+      }
+      // Unrecognized command
+      else {
+        setFeedback(
+          `Unrecognized command: "${command}". Say "help" for available commands.`
+        );
+        speak("Unrecognized command. Say help for available commands");
+      }
+    } catch (error) {
+      console.error("Error processing command:", error);
+      setFeedback(`Error processing command: ${error.message}`);
+      speak("Error processing command");
+    }
+
+    setProcessingCommand(false);
+  };
+
+  return (
+    <Modal
+      title={
+        <div className="flex items-center justify-between">
+          <span>Voice Control - Audica POS</span>
+          <Button
+            type={isListening ? "primary" : "default"}
+            icon={isListening ? <AudioOutlined /> : <AudioMutedOutlined />}
+            onClick={toggleListening}
+            className="ml-4"
+          >
+            {isListening ? "Listening" : "Start Listening"}
+          </Button>
+        </div>
+      }
+      open={isVisible}
+      onCancel={onClose}
+      footer={[
+        <Button key="help" onClick={() => processVoiceCommand("help")}>
+          Show Commands
+        </Button>,
+        <Button key="clear" onClick={() => processVoiceCommand("clear cart")}>
+          Clear Cart
+        </Button>,
+        <Button
+          key="print"
+          type="primary"
+          icon={<PrinterOutlined />}
+          onClick={() => processVoiceCommand("print bill")}
+          disabled={cart.length === 0}
+        >
+          Print Bill
+        </Button>,
+      ]}
+      width={700}
+    >
+      <div className="space-y-4">
+        {/* Feedback and status section */}
+        <div className="p-3 bg-blue-50 rounded-lg">
+          <div className="font-semibold text-lg mb-2">
+            {isListening ? (
+              <Badge status="processing" text="Listening for commands..." />
+            ) : (
+              <Badge status="default" text="Voice recognition paused" />
+            )}
+          </div>
+          <div className="text-gray-700">
+            {processingCommand ? (
+              <div className="flex items-center">
+                <Spin size="small" className="mr-2" /> Processing...
+              </div>
+            ) : (
+              feedback || "Ready for voice commands"
+            )}
+          </div>
+
+          {transcript && (
+            <div className="mt-2 p-2 bg-white rounded border text-gray-600">
+              <div className="font-semibold">I heard:</div>
+              <div className="italic">{transcript}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Search results section */}
+        {searchResults.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Search Results:</h3>
+            <List
+              size="small"
+              bordered
+              dataSource={searchResults}
+              renderItem={(item, index) => (
+                <List.Item
+                  className={
+                    selectedMedicine && selectedMedicine.id === item.id
+                      ? "bg-blue-50"
+                      : ""
+                  }
+                  onClick={() => {
+                    setSelectedMedicine(item);
+                    setFeedback(
+                      `Selected ${item.name}. Say "quantity" followed by a number to set quantity.`
+                    );
+                  }}
+                >
+                  <div className="flex w-full justify-between">
+                    <span className="font-medium">
+                      {index + 1}. {item.name}
+                    </span>
+                    <span>${item.price.toFixed(2)}</span>
+                  </div>
+                </List.Item>
+              )}
+            />
+          </div>
+        )}
+
+        {/* Selected medicine and quantity section */}
+        {selectedMedicine && (
+          <div className="p-3 bg-green-50 rounded-lg mt-4">
+            <h3 className="font-medium">Selected Item:</h3>
+            <div className="flex justify-between items-center">
+              <div>
+                <div className="font-medium">{selectedMedicine.name}</div>
+                <div className="text-sm text-gray-600">
+                  ${selectedMedicine.price.toFixed(2)} each
+                </div>
+              </div>
+              <div className="flex items-center">
+                <span className="mr-2">Quantity:</span>
+                <InputNumber
+                  min={1}
+                  value={quantity}
+                  onChange={(value) => setQuantity(value)}
+                  onPressEnter={() => {
+                    if (selectedMedicine) {
+                      const cartItem = {
+                        ...selectedMedicine,
+                        quantity,
+                        total: selectedMedicine.price * quantity,
+                      };
+                      setCart([...cart, cartItem]);
+                      onAddToCart(cartItem);
+                    }
+                  }}
+                />
+                <Button
+                  type="primary"
+                  icon={<ShoppingCartOutlined />}
+                  className="ml-2"
+                  onClick={() => processVoiceCommand("add to cart")}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cart summary section */}
+        {cart.length > 0 && (
+          <div className="mt-4">
+            <h3 className="font-medium mb-2">Cart Summary:</h3>
+            <List
+              size="small"
+              bordered
+              dataSource={cart}
+              renderItem={(item, index) => (
+                <List.Item>
+                  <div className="flex w-full justify-between">
+                    <span>
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span>${item.total.toFixed(2)}</span>
+                  </div>
+                </List.Item>
+              )}
+              footer={
+                <div className="flex justify-between font-medium">
+                  <span>Total:</span>
+                  <span>
+                    $
+                    {cart.reduce((sum, item) => sum + item.total, 0).toFixed(2)}
+                  </span>
+                </div>
+              }
+            />
+          </div>
+        )}
+
+        {/* Command help section */}
+        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <h3 className="font-medium mb-1">Voice Commands:</h3>
+          <ul className="text-sm text-gray-600 space-y-1">
+            <li>
+              "<span className="font-medium">search [name]</span>" - Search for
+              a medicine
+            </li>
+            <li>
+              "<span className="font-medium">select [number]</span>" - Select
+              item from results
+            </li>
+            <li>
+              "<span className="font-medium">quantity [number]</span>" - Set
+              quantity
+            </li>
+            <li>
+              "<span className="font-medium">add to cart</span>" - Add current
+              item to cart
+            </li>
+            <li>
+              "<span className="font-medium">clear cart</span>" - Remove all
+              items
+            </li>
+            <li>
+              "<span className="font-medium">print bill</span>" - Print receipt
+            </li>
+            <li>
+              "<span className="font-medium">exit</span>" - Close voice control
+            </li>
+          </ul>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+export default VoiceControlModal;
