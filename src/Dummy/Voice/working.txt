@@ -1,0 +1,2952 @@
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Input,
+  Button,
+  List,
+  Card,
+  Badge,
+  Modal,
+  message,
+  Spin,
+  Divider,
+  Tag,
+  Typography,
+  Switch,
+} from "antd";
+import {
+  SearchOutlined,
+  ShoppingCartOutlined,
+  AudioOutlined,
+  CloseCircleOutlined,
+  PrinterOutlined,
+  PlusOutlined,
+  MinusOutlined,
+  DeleteOutlined,
+  SoundOutlined,
+} from "@ant-design/icons";
+
+const { Title, Text } = Typography;
+
+// Dummy product data
+const dummyProducts = [
+  {
+    id: 1,
+    name: "Panadol",
+    price: 5.99,
+    stock: 50,
+    description: "Pain reliever and fever reducer",
+  },
+  {
+    id: 2,
+    name: "Xarelto",
+    price: 25.99,
+    stock: 20,
+    description: "Blood thinner medication",
+  },
+  {
+    id: 3,
+    name: "Aspirin",
+    price: 4.5,
+    stock: 100,
+    description: "Pain reliever and blood thinner",
+  },
+  {
+    id: 4,
+    name: "Ibuprofen",
+    price: 6.75,
+    stock: 75,
+    description: "Non-steroidal anti-inflammatory drug",
+  },
+  {
+    id: 5,
+    name: "Zoloft",
+    price: 15.25,
+    stock: 30,
+    description: "Antidepressant medication",
+  },
+  {
+    id: 6,
+    name: "Lipitor",
+    price: 18.99,
+    stock: 25,
+    description: "Cholesterol-lowering medication",
+  },
+  {
+    id: 7,
+    name: "Metformin",
+    price: 8.5,
+    stock: 60,
+    description: "Type 2 diabetes medication",
+  },
+  {
+    id: 8,
+    name: "Amoxicillin",
+    price: 12.35,
+    stock: 40,
+    description: "Antibiotic",
+  },
+  {
+    id: 9,
+    name: "Ventolin",
+    price: 22.99,
+    stock: 15,
+    description: "Asthma inhaler",
+  },
+  {
+    id: 10,
+    name: "Loratadine",
+    price: 7.25,
+    stock: 80,
+    description: "Antihistamine for allergies",
+  },
+];
+
+const VoicePOSSystem = () => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [isListening, setIsListening] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [printModalVisible, setPrintModalVisible] = useState(false);
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [commandLog, setCommandLog] = useState([]);
+  const [autoRestart, setAutoRestart] = useState(true);
+  const openAi = "key is here";
+  const recognitionRef = useRef(null);
+  const commandProcessingRef = useRef(false);
+  const cartTotal = cart.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  // Initialize Web Speech API
+  useEffect(() => {
+    if ("SpeechRecognition" in window || "webkitSpeechRecognition" in window) {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = "en-US";
+
+      recognitionRef.current.onstart = () => {
+        setIsListening(true);
+        setTranscript("Listening...");
+      };
+
+      recognitionRef.current.onresult = (event) => {
+        const speechResult = event.results[0][0].transcript;
+        setTranscript(speechResult);
+        processVoiceCommand(speechResult);
+      };
+
+      recognitionRef.current.onerror = (event) => {
+        console.error("Speech recognition error", event);
+        setIsListening(false);
+        if (event.error !== "no-speech") {
+          setTranscript(`Error: ${event.error}`);
+          message.error(
+            `Speech recognition error: ${event.error}. Please try again.`
+          );
+        } else {
+          setTranscript("No speech detected. Still listening...");
+          // Continue listening on no-speech error
+          if (
+            voiceModalVisible &&
+            autoRestart &&
+            !commandProcessingRef.current
+          ) {
+            setTimeout(() => startListening(), 300);
+          }
+        }
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+
+        // Auto restart if modal is open and we're not processing a command
+        if (voiceModalVisible && autoRestart && !commandProcessingRef.current) {
+          setTimeout(() => startListening(), 300);
+        }
+      };
+    } else {
+      message.error("Speech recognition is not supported in this browser.");
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
+  }, [voiceModalVisible, autoRestart]);
+
+  const processVoiceCommand = async (rawCommand) => {
+    commandProcessingRef.current = true;
+    setProcessing(true);
+    try {
+      // Send the raw command to OpenAI for correction
+      const correctedCommand = await correctWithOpenAI(rawCommand);
+
+      setCommandLog((prev) => [
+        ...prev,
+        {
+          raw: rawCommand,
+          corrected: correctedCommand,
+          timestamp: new Date().toLocaleTimeString(),
+        },
+      ]);
+
+      // Process the corrected command
+      await executeCommand(correctedCommand);
+    } catch (error) {
+      console.error("Error processing command:", error);
+      message.error("Error processing voice command");
+    } finally {
+      setProcessing(false);
+      commandProcessingRef.current = false;
+
+      // Restart listening after command is processed if modal is still open
+      if (voiceModalVisible && autoRestart) {
+        setTimeout(() => startListening(), 500);
+      }
+    }
+  };
+
+  const correctWithOpenAI = async (rawCommand) => {
+    try {
+      const response = await fetch(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openAi}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-3.5-turbo",
+            messages: [
+              {
+                role: "system",
+                content: `You are a voice command processor for a pharmacy POS system. 
+                        Correct any misheard commands and return ONLY the corrected command 
+                        with no additional text or explanation. 
+                        Common commands include: "search for [medicine name]", "add to cart", 
+                        "remove from cart", "select [number]", "print bill", "clear cart", "close".
+                        Common medicines include: panadol, xarelto, aspirin, ibuprofen, etc.`,
+              },
+              {
+                role: "user",
+                content: `Correct this voice command: "${rawCommand}"`,
+              },
+            ],
+            temperature: 0.3,
+            max_tokens: 50,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content.trim();
+      } else {
+        console.error("Unexpected API response:", data);
+        return rawCommand;
+      }
+    } catch (error) {
+      console.error("OpenAI API error:", error);
+      return rawCommand;
+    }
+  };
+
+  // Execute the corrected command
+  const executeCommand = async (command) => {
+    const lowerCommand = command.toLowerCase();
+
+    // Search command
+    if (lowerCommand.startsWith("search")) {
+      const searchTerm = lowerCommand.replace(/search( for)?/i, "").trim();
+      if (searchTerm) {
+        setSearchQuery(searchTerm);
+        handleSearch(searchTerm);
+        message.success(`Searching for: ${searchTerm}`);
+      }
+      return;
+    }
+
+    // Select command
+    if (lowerCommand.startsWith("select")) {
+      const match = lowerCommand.match(/select (\d+)/i);
+      if (match && match[1]) {
+        const index = parseInt(match[1]) - 1;
+        if (searchResults[index]) {
+          addToCart(searchResults[index]);
+          message.success(`Added ${searchResults[index].name} to cart`);
+        } else {
+          message.error(`Item #${match[1]} not found in search results`);
+        }
+      }
+      return;
+    }
+
+    // Add to cart command
+    if (lowerCommand.includes("add to cart")) {
+      if (searchResults.length > 0) {
+        addToCart(searchResults[0]);
+        message.success(`Added ${searchResults[0].name} to cart`);
+      } else {
+        message.error("Please search for a product first");
+      }
+      return;
+    }
+
+    // Remove from cart command
+    if (lowerCommand.includes("remove from cart")) {
+      if (cart.length > 0) {
+        const lastItem = cart[cart.length - 1];
+        removeFromCart(lastItem.id);
+        message.success(`Removed ${lastItem.name} from cart`);
+      } else {
+        message.error("Cart is empty");
+      }
+      return;
+    }
+
+    // Clear cart command
+    if (lowerCommand.includes("clear cart")) {
+      if (cart.length > 0) {
+        setCart([]);
+        message.success("Cart cleared");
+      } else {
+        message.info("Cart is already empty");
+      }
+      return;
+    }
+
+    // Print bill command
+    if (lowerCommand.includes("print bill")) {
+      if (cart.length > 0) {
+        setPrintModalVisible(true);
+        message.success("Preparing bill for printing");
+      } else {
+        message.error("Cart is empty. Nothing to print.");
+      }
+      return;
+    }
+
+    // Close command
+    if (lowerCommand.includes("close") || lowerCommand.includes("exit")) {
+      setVoiceModalVisible(false);
+      message.info("Voice assistant closed");
+      return;
+    }
+
+    message.info(`Command "${command}" not recognized or not implemented`);
+  };
+
+  // Start voice recognition
+  const startListening = () => {
+    if (recognitionRef.current && !isListening) {
+      try {
+        recognitionRef.current.start();
+      } catch (error) {
+        console.error("Error starting recognition:", error);
+        setTimeout(() => startListening(), 300);
+      }
+    }
+  };
+
+  // Toggle continuous listening
+  const toggleContinuousListening = (checked) => {
+    setAutoRestart(checked);
+    if (
+      checked &&
+      voiceModalVisible &&
+      !isListening &&
+      !commandProcessingRef.current
+    ) {
+      startListening();
+    }
+  };
+
+  // Open voice modal and start listening
+  const openVoiceAssistant = () => {
+    setVoiceModalVisible(true);
+    // Small delay to ensure modal is rendered before starting recognition
+    setTimeout(() => {
+      if (autoRestart && !isListening) {
+        startListening();
+      }
+    }, 300);
+  };
+
+  // Close voice modal and stop listening
+  const closeVoiceAssistant = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.abort();
+    }
+    setVoiceModalVisible(false);
+    setIsListening(false);
+  };
+
+  // Search for products
+  const handleSearch = (query) => {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    const filtered = dummyProducts.filter(
+      (product) =>
+        product.name.toLowerCase().includes(query.toLowerCase()) ||
+        product.description.toLowerCase().includes(query.toLowerCase())
+    );
+
+    setSearchResults(filtered);
+  };
+
+  // Add product to cart
+  const addToCart = (product) => {
+    setCart((prevCart) => {
+      const existingItem = prevCart.find((item) => item.id === product.id);
+      if (existingItem) {
+        return prevCart.map((item) =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      } else {
+        return [...prevCart, { ...product, quantity: 1 }];
+      }
+    });
+  };
+
+  // Remove product from cart
+  const removeFromCart = (productId) => {
+    setCart((prevCart) => {
+      const existingItem = prevCart.find((item) => item.id === productId);
+
+      if (existingItem && existingItem.quantity > 1) {
+        return prevCart.map((item) =>
+          item.id === productId
+            ? { ...item, quantity: item.quantity - 1 }
+            : item
+        );
+      } else {
+        return prevCart.filter((item) => item.id !== productId);
+      }
+    });
+  };
+
+  // Handle printing the bill
+  const handlePrint = () => {
+    message.success("Bill printed successfully!");
+    setPrintModalVisible(false);
+    setCart([]);
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto p-4">
+      <div className="flex justify-between items-center mb-6">
+        <Title level={2} className="m-0">
+          Audica Voice POS System
+        </Title>
+        <div className="flex items-center gap-4">
+          <Button
+            type="primary"
+            size="large"
+            icon={<SoundOutlined />}
+            onClick={openVoiceAssistant}
+          >
+            Voice Assistant
+          </Button>
+          <Badge count={cart.length} showZero>
+            <Button
+              type="primary"
+              size="large"
+              icon={<ShoppingCartOutlined />}
+              onClick={() => cart.length > 0 && setPrintModalVisible(true)}
+            >
+              Cart (${cartTotal.toFixed(2)})
+            </Button>
+          </Badge>
+        </div>
+      </div>
+
+      <div className="bg-gray-100 p-4 rounded-lg mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Input
+            size="large"
+            placeholder="Search for medicines..."
+            prefix={<SearchOutlined />}
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              handleSearch(e.target.value);
+            }}
+            className="flex-grow"
+          />
+          <Button
+            size="large"
+            type="primary"
+            icon={<SearchOutlined />}
+            onClick={() => handleSearch(searchQuery)}
+          >
+            Search
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex gap-6">
+        {/* Search Results */}
+        <div className="flex-1">
+          <Card title="Search Results" className="mb-6">
+            {searchResults.length > 0 ? (
+              <List
+                dataSource={searchResults}
+                renderItem={(item, index) => (
+                  <List.Item
+                    actions={[
+                      <Button
+                        key="add"
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={() => addToCart(item)}
+                      >
+                        Add
+                      </Button>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      title={
+                        <div className="flex items-center">
+                          <Tag color="blue">{index + 1}</Tag>
+                          <span className="ml-2">{item.name}</span>
+                        </div>
+                      }
+                      description={item.description}
+                    />
+                    <div className="text-right">
+                      <Text strong>${item.price.toFixed(2)}</Text>
+                      <br />
+                      <Text type="secondary">In stock: {item.stock}</Text>
+                    </div>
+                  </List.Item>
+                )}
+              />
+            ) : (
+              <div className="text-center py-6">
+                <Text type="secondary">
+                  No results found. Try searching for a product or use voice
+                  commands.
+                </Text>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Cart */}
+        <div className="w-96">
+          <Card
+            title={
+              <div className="flex justify-between items-center">
+                <span>Shopping Cart</span>
+                <Badge count={cart.length} showZero />
+              </div>
+            }
+            extra={
+              cart.length > 0 && (
+                <Button
+                  type="primary"
+                  icon={<PrinterOutlined />}
+                  onClick={() => setPrintModalVisible(true)}
+                >
+                  Bill
+                </Button>
+              )
+            }
+          >
+            {cart.length > 0 ? (
+              <>
+                <List
+                  dataSource={cart}
+                  renderItem={(item) => (
+                    <List.Item
+                      actions={[
+                        <Button
+                          key="minus"
+                          icon={<MinusOutlined />}
+                          size="small"
+                          onClick={() => removeFromCart(item.id)}
+                        />,
+                        <Button
+                          key="delete"
+                          icon={<DeleteOutlined />}
+                          size="small"
+                          danger
+                          onClick={() => {
+                            setCart(cart.filter((i) => i.id !== item.id));
+                          }}
+                        />,
+                      ]}
+                    >
+                      <List.Item.Meta
+                        title={item.name}
+                        description={`$${item.price.toFixed(2)} × ${
+                          item.quantity
+                        }`}
+                      />
+                      <div>${(item.price * item.quantity).toFixed(2)}</div>
+                    </List.Item>
+                  )}
+                />
+                <Divider />
+                <div className="flex justify-between font-medium">
+                  <span>Total:</span>
+                  <span>${cartTotal.toFixed(2)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <ShoppingCartOutlined
+                  style={{ fontSize: "24px", color: "#d9d9d9" }}
+                />
+                <p className="mt-2 text-gray-500">Your cart is empty</p>
+                <p className="text-gray-400 text-sm">
+                  Search for products and add them to your cart
+                </p>
+              </div>
+            )}
+          </Card>
+        </div>
+      </div>
+
+      {/* Voice Assistant Modal */}
+      <Modal
+        title={
+          <div className="flex justify-between items-center">
+            <span>Voice Assistant</span>
+            <div className="flex items-center gap-2">
+              <Text type="secondary">Continuous:</Text>
+              <Switch
+                checked={autoRestart}
+                onChange={toggleContinuousListening}
+                size="small"
+              />
+            </div>
+          </div>
+        }
+        open={voiceModalVisible}
+        onCancel={closeVoiceAssistant}
+        footer={[
+          <Button key="back" onClick={closeVoiceAssistant}>
+            Close
+          </Button>,
+          <Button
+            key="listen"
+            type={isListening ? "danger" : "primary"}
+            icon={<AudioOutlined />}
+            onClick={startListening}
+            loading={isListening}
+            disabled={processing}
+          >
+            {isListening ? "Listening..." : "Start Listening"}
+          </Button>,
+        ]}
+        width={700}
+      >
+        <div
+          className={`p-6 mb-4 rounded-lg text-center ${
+            isListening ? "bg-blue-50" : "bg-gray-50"
+          }`}
+        >
+          <div className="mb-2">
+            <span
+              className={`inline-block w-4 h-4 rounded-full ${
+                isListening ? "bg-red-500 animate-pulse" : "bg-gray-300"
+              }`}
+            ></span>
+            <Text strong className="ml-2">
+              {isListening ? "Listening..." : "Voice assistant ready"}
+            </Text>
+          </div>
+          <div className="min-h-16 p-3 bg-white rounded border">
+            {transcript ? (
+              <Text>
+                {transcript}{" "}
+                {processing && <Spin size="small" className="ml-2" />}
+              </Text>
+            ) : (
+              <Text type="secondary">
+                Say a command like "search for panadol" or "select 1"
+              </Text>
+            )}
+          </div>
+        </div>
+
+        <Card title="Available Commands" size="small" className="mb-4">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Tag color="blue">search for [medicine]</Tag>
+              <Tag color="green">select [number]</Tag>
+              <Tag color="cyan">add to cart</Tag>
+            </div>
+            <div>
+              <Tag color="orange">remove from cart</Tag>
+              <Tag color="red">clear cart</Tag>
+              <Tag color="purple">print bill</Tag>
+              <Tag color="default">close</Tag>
+            </div>
+          </div>
+        </Card>
+
+        <Card
+          title="Command Log"
+          size="small"
+          className="max-h-64 overflow-auto"
+        >
+          {commandLog.length > 0 ? (
+            <List
+              size="small"
+              dataSource={commandLog.slice().reverse()}
+              renderItem={(log) => (
+                <List.Item>
+                  <div className="w-full">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Raw: "{log.raw}"</span>
+                      <span>{log.timestamp}</span>
+                    </div>
+                    <div className="font-medium">
+                      Processed: "{log.corrected}"
+                    </div>
+                  </div>
+                </List.Item>
+              )}
+            />
+          ) : (
+            <div className="text-center py-4">
+              <Text type="secondary">
+                No commands yet. Try using voice search.
+              </Text>
+            </div>
+          )}
+        </Card>
+      </Modal>
+
+      {/* Print Bill Modal */}
+      <Modal
+        title="Bill Receipt"
+        open={printModalVisible}
+        onCancel={() => setPrintModalVisible(false)}
+        footer={[
+          <Button key="back" onClick={() => setPrintModalVisible(false)}>
+            Cancel
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            icon={<PrinterOutlined />}
+            onClick={handlePrint}
+          >
+            Print & Complete
+          </Button>,
+        ]}
+      >
+        <div className="border-b pb-2 mb-4">
+          <Title level={4} className="text-center mb-1">
+            Audica Pharmacy
+          </Title>
+          <p className="text-center text-gray-500 text-sm m-0">
+            123 Health Street, Medville
+          </p>
+          <p className="text-center text-gray-500 text-sm">
+            {new Date().toLocaleDateString()} -{" "}
+            {new Date().toLocaleTimeString()}
+          </p>
+        </div>
+
+        <List
+          size="small"
+          dataSource={cart}
+          renderItem={(item) => (
+            <List.Item className="py-1">
+              <div className="w-full flex justify-between">
+                <div>
+                  <Text>{item.name}</Text>
+                  <div className="text-gray-500 text-xs">
+                    ${item.price.toFixed(2)} × {item.quantity}
+                  </div>
+                </div>
+                <Text strong>${(item.price * item.quantity).toFixed(2)}</Text>
+              </div>
+            </List.Item>
+          )}
+        />
+
+        <Divider className="my-2" />
+
+        <div className="flex justify-between mb-1">
+          <Text>Subtotal:</Text>
+          <Text>${cartTotal.toFixed(2)}</Text>
+        </div>
+        <div className="flex justify-between mb-1">
+          <Text>Tax (10%):</Text>
+          <Text>${(cartTotal * 0.1).toFixed(2)}</Text>
+        </div>
+        <div className="flex justify-between font-bold">
+          <Text strong>Total:</Text>
+          <Text strong>${(cartTotal * 1.1).toFixed(2)}</Text>
+        </div>
+
+        <Divider className="my-3" />
+
+        <p className="text-center text-gray-500 text-sm">
+          Thank you for your purchase!
+        </p>
+      </Modal>
+    </div>
+  );
+};
+
+export default VoicePOSSystem;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Input,
+  Button,
+  List,
+  Card,
+  Badge,
+  Modal,
+  message,
+  Spin,
+  Divider,
+  Tag,
+  Typography,
+  Switch,
+  Layout,
+  Empty,
+} from "antd";
+import {
+  SearchOutlined,
+  ShoppingCartOutlined,
+  AudioOutlined,
+  PrinterOutlined,
+  PlusOutlined,
+  MinusOutlined,
+  DeleteOutlined,
+  SoundOutlined,
+} from "@ant-design/icons";
+
+const { Title, Text } = Typography;
+const { Content } = Layout;
+
+// Dummy product data
+const dummyProducts = [
+  {
+    id: 1,
+    name: "Panadol",
+    price: 5.99,
+    stock: 50,
+    description: "Pain reliever and fever reducer",
+  },
+  {
+    id: 2,
+    name: "Xarelto",
+    price: 25.99,
+    stock: 20,
+    description: "Blood thinner medication",
+  },
+  {
+    id: 3,
+    name: "Aspirin",
+    price: 4.5,
+    stock: 100,
+    description: "Pain reliever and blood thinner",
+  },
+  {
+    id: 4,
+    name: "Ibuprofen",
+    price: 6.75,
+    stock: 75,
+    description: "Non-steroidal anti-inflammatory drug",
+  },
+  {
+    id: 5,
+    name: "Zoloft",
+    price: 15.25,
+    stock: 30,
+    description: "Antidepressant medication",
+  },
+  {
+    id: 6,
+    name: "Lipitor",
+    price: 18.99,
+    stock: 25,
+    description: "Cholesterol-lowering medication",
+  },
+  {
+    id: 7,
+    name: "Metformin",
+    price: 8.5,
+    stock: 60,
+    description: "Type 2 diabetes medication",
+  },
+  {
+    id: 8,
+    name: "Amoxicillin",
+    price: 12.35,
+    stock: 40,
+    description: "Antibiotic",
+  },
+  {
+    id: 9,
+    name: "Ventolin",
+    price: 22.99,
+    stock: 15,
+    description: "Asthma inhaler",
+  },
+  {
+    id: 10,
+    name: "Loratadine",
+    price: 7.25,
+    stock: 80,
+    description: "Antihistamine for allergies",
+  },
+];
+
+const PharmacyPOSModal = ({ visible, onClose }) => {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [isListening, setIsListening] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [printModalVisible, setPrintModalVisible] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [commandLog, setCommandLog] = useState([]);
+  const [autoRestart, setAutoRestart] = useState(true);
+  const openAiKey = "YOUR_API_KEY"; // Should be stored securely
+
+  // Create stable refs to prevent cleanup issues
+  const recognitionRef = useRef(null);
+  const commandProcessingRef = useRef(false);
+  const lastCommandRef = useRef("");
+  const timeoutRef = useRef(null);
+  const mountedRef = useRef(true);
+  const voiceEnabledRef = useRef(false);
+  const autoRestartRef = useRef(true);
+  const searchResultsRef = useRef([]);
+  const cartRef = useRef([]);
+
+  // Update ref values when state changes
+  useEffect(() => {
+    voiceEnabledRef.current = voiceEnabled;
+    autoRestartRef.current = autoRestart;
+    searchResultsRef.current = searchResults;
+    cartRef.current = cart;
+  }, [voiceEnabled, autoRestart, searchResults, cart]);
+
+  const cartTotal = cart.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+
+  // Initialize Web Speech API
+  useEffect(() => {
+    // Set mounted ref to true when component mounts
+    mountedRef.current = true;
+
+    // Only setup speech recognition when visible and supported
+    if (!visible) return;
+
+    // Cleanup function to be called on unmount or when dependencies change
+    return () => {
+      // Mark component as unmounted
+      mountedRef.current = false;
+
+      // Clear any pending timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+
+      // Stop speech recognition if it's running
+      cleanupSpeechRecognition();
+    };
+  }, [visible]);
+
+  // Setup effect for speech recognition
+  useEffect(() => {
+    // Skip if component isn't visible or speech recognition is already set up
+    if (!visible) return;
+
+    setupSpeechRecognition();
+
+    // Return cleanup function
+    return cleanupSpeechRecognition;
+  }, [visible, voiceEnabled]);
+
+  // Function to setup speech recognition
+  const setupSpeechRecognition = () => {
+    // Clean up any existing instance first
+    cleanupSpeechRecognition();
+
+    try {
+      // Only setup if browser supports it
+      if (
+        typeof window !== "undefined" &&
+        ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
+      ) {
+        const SpeechRecognition =
+          window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        // Create new recognition instance
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = "en-US";
+
+        // Setup event handlers with proper error checking
+        recognitionRef.current.onstart = () => {
+          if (!mountedRef.current) return;
+          setIsListening(true);
+          setTranscript("Listening...");
+        };
+
+        recognitionRef.current.onresult = (event) => {
+          if (!mountedRef.current) return;
+          const speechResult = event.results[0][0].transcript;
+          setTranscript(speechResult);
+          processVoiceCommand(speechResult);
+        };
+
+        recognitionRef.current.onerror = (event) => {
+          if (!mountedRef.current) return;
+
+          console.log("Speech recognition error", event.error);
+          setIsListening(false);
+
+          if (event.error === "aborted") {
+            // This is an expected error when we intentionally abort
+            return;
+          } else if (event.error !== "no-speech") {
+            setTranscript(`Error: ${event.error}`);
+            message.error(
+              `Speech recognition error: ${event.error}. Please try again.`,
+              1
+            );
+          } else {
+            setTranscript("No speech detected. Ready for commands...");
+          }
+
+          // Only restart if component is mounted and voice is enabled
+          if (
+            mountedRef.current &&
+            voiceEnabledRef.current &&
+            autoRestartRef.current &&
+            !commandProcessingRef.current
+          ) {
+            // Use our timeout ref for better cleanup
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+              timeoutRef.current = null;
+              if (mountedRef.current && voiceEnabledRef.current) {
+                startListening();
+              }
+            }, 1000);
+          }
+        };
+
+        recognitionRef.current.onend = () => {
+          if (!mountedRef.current) return;
+
+          setIsListening(false);
+
+          // Only restart if component is mounted and voice is enabled
+          if (
+            mountedRef.current &&
+            voiceEnabledRef.current &&
+            autoRestartRef.current &&
+            !commandProcessingRef.current
+          ) {
+            // Use our timeout ref for better cleanup
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+              timeoutRef.current = null;
+              if (mountedRef.current && voiceEnabledRef.current) {
+                startListening();
+              }
+            }, 1000);
+          }
+        };
+
+        // Start listening if voice is enabled
+        if (voiceEnabled && autoRestart) {
+          startListening();
+        }
+      } else {
+        console.warn("Speech recognition is not supported in this browser.");
+        if (typeof window !== "undefined") {
+          message.error("Speech recognition is not supported in this browser.");
+        }
+      }
+    } catch (error) {
+      console.error("Error initializing speech recognition:", error);
+      message.error("Failed to initialize speech recognition.");
+    }
+  };
+
+  // Clean up function for speech recognition
+  const cleanupSpeechRecognition = () => {
+    // Clear any pending timeouts
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // Abort recognition if it exists
+    if (recognitionRef.current) {
+      try {
+        // Try to abort the recognition
+        recognitionRef.current.abort();
+      } catch (error) {
+        // Ignore errors during cleanup
+        console.log("Could not abort speech recognition:", error);
+      } finally {
+        // Always clear the reference
+        recognitionRef.current = null;
+      }
+    }
+  };
+
+  const processVoiceCommand = async (rawCommand) => {
+    if (!rawCommand || rawCommand.trim() === "") return;
+    if (!mountedRef.current) return;
+
+    // Prevent duplicate command processing
+    if (rawCommand === lastCommandRef.current) {
+      return;
+    }
+
+    lastCommandRef.current = rawCommand;
+    commandProcessingRef.current = true;
+    setProcessing(true);
+
+    try {
+      // Simple command preprocessing - no need for API in many cases
+      let commandToProcess = rawCommand.toLowerCase().trim();
+      let needsAICorrection = true;
+
+      // Direct command matching for common actions
+      if (
+        commandToProcess === "clear cart" ||
+        commandToProcess === "clear the cart" ||
+        commandToProcess === "empty cart"
+      ) {
+        commandToProcess = "clear cart";
+        needsAICorrection = false;
+      } else if (
+        commandToProcess === "print bill" ||
+        commandToProcess === "print the bill" ||
+        commandToProcess === "checkout"
+      ) {
+        commandToProcess = "print bill";
+        needsAICorrection = false;
+      } else if (
+        commandToProcess === "close" ||
+        commandToProcess === "exit" ||
+        commandToProcess === "quit"
+      ) {
+        commandToProcess = "close";
+        needsAICorrection = false;
+      } else if (
+        commandToProcess === "add to cart" ||
+        commandToProcess === "add item" ||
+        commandToProcess === "add this item"
+      ) {
+        commandToProcess = "add to cart";
+        needsAICorrection = false;
+      } else if (
+        commandToProcess === "select one" ||
+        commandToProcess === "select 1" ||
+        /^select (one|1)$/.test(commandToProcess)
+      ) {
+        // Explicitly handle "select one" or "select 1"
+        commandToProcess = "select 1";
+        needsAICorrection = false;
+      } else if (
+        commandToProcess.startsWith("select ") &&
+        /\d+$/.test(commandToProcess)
+      ) {
+        needsAICorrection = false;
+      } else if (
+        commandToProcess.startsWith("search for ") ||
+        commandToProcess.startsWith("search ")
+      ) {
+        needsAICorrection = false;
+      }
+
+      // Only use API for complex or ambiguous commands
+      const correctedCommand =
+        needsAICorrection && openAiKey && openAiKey !== "YOUR_API_KEY"
+          ? await correctWithOpenAI(rawCommand)
+          : commandToProcess;
+
+      // Log the command if component is still mounted
+      if (mountedRef.current) {
+        setCommandLog((prev) => [
+          ...prev,
+          {
+            raw: rawCommand,
+            corrected: correctedCommand,
+            timestamp: new Date().toLocaleTimeString(),
+          },
+        ]);
+
+        // Execute the command
+        await executeCommand(correctedCommand);
+      }
+    } catch (error) {
+      console.error("Error processing command:", error);
+      if (mountedRef.current) {
+        message.error("Error processing voice command");
+      }
+    } finally {
+      // Only update state if component is still mounted
+      if (mountedRef.current) {
+        setProcessing(false);
+      }
+      commandProcessingRef.current = false;
+
+      // Reset last command after a delay
+      setTimeout(() => {
+        lastCommandRef.current = "";
+      }, 1000);
+
+      // Restart listening after command is processed if still mounted
+      if (
+        mountedRef.current &&
+        voiceEnabledRef.current &&
+        autoRestartRef.current
+      ) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => {
+          timeoutRef.current = null;
+          if (mountedRef.current && voiceEnabledRef.current) {
+            startListening();
+          }
+        }, 1000);
+      }
+    }
+  };
+
+  const correctWithOpenAI = async (rawCommand) => {
+    if (!openAiKey || openAiKey === "YOUR_API_KEY") {
+      console.warn("OpenAI key not provided, using basic command processing");
+      return rawCommand.toLowerCase().trim();
+    }
+
+    try {
+      const response = await fetch(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openAiKey}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-3.5-turbo",
+            messages: [
+              {
+                role: "system",
+                content: `You are a voice command processor for a pharmacy POS system. 
+                        Correct any misheard commands and return ONLY the corrected command 
+                        with no additional text or explanation. 
+                        Common commands include: "search for [medicine name]", "add to cart", 
+                        "remove from cart", "select [number]", "print bill", "clear cart", "close".
+                        Common medicines include: panadol, xarelto, aspirin, ibuprofen, etc.`,
+              },
+              {
+                role: "user",
+                content: `Correct this voice command: "${rawCommand}"`,
+              },
+            ],
+            temperature: 0.3,
+            max_tokens: 50,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (data.choices && data.choices[0]?.message?.content) {
+        return data.choices[0].message.content.trim().toLowerCase();
+      } else {
+        console.error("Unexpected API response:", data);
+        return rawCommand.toLowerCase().trim();
+      }
+    } catch (error) {
+      console.error("OpenAI API error:", error);
+      return rawCommand.toLowerCase().trim();
+    }
+  };
+
+  // Execute the command
+  const executeCommand = async (command) => {
+    const lowerCommand = command.toLowerCase().trim();
+
+    // Search command
+    if (lowerCommand.includes("search")) {
+      const searchTerm = lowerCommand.replace(/search( for)?/i, "").trim();
+      if (searchTerm) {
+        setSearchQuery(searchTerm);
+        handleSearch(searchTerm);
+        message.success(`Searching for: ${searchTerm}`);
+      } else {
+        message.info("Please specify what to search for");
+      }
+      return;
+    }
+
+    // Select command - Fixed to handle "select one" and "select 1" properly
+    if (lowerCommand.startsWith("select")) {
+      const match = lowerCommand.match(/select (\d+|one)/i);
+      if (match && match[1]) {
+        // Convert "one" to 1 if needed
+        const indexStr = match[1].toLowerCase() === "one" ? "1" : match[1];
+        const index = parseInt(indexStr) - 1;
+
+        // Use the ref instead of the state to ensure we have the latest value
+        const currentSearchResults = searchResultsRef.current;
+
+        // Check if index is valid
+        if (index >= 0 && index < currentSearchResults.length) {
+          addToCart(currentSearchResults[index]);
+          message.success(`Added ${currentSearchResults[index].name} to cart`);
+        } else {
+          message.error(`Item #${indexStr} not found in search results`);
+        }
+      }
+      return;
+    }
+
+    // Add to cart command
+    if (lowerCommand.includes("add to cart") || lowerCommand === "add item") {
+      const currentSearchResults = searchResultsRef.current;
+      if (currentSearchResults.length > 0) {
+        addToCart(currentSearchResults[0]);
+        message.success(`Added ${currentSearchResults[0].name} to cart`);
+      } else {
+        message.error("Please search for a product first");
+      }
+      return;
+    }
+
+    // Remove from cart command
+    if (lowerCommand.includes("remove")) {
+      const currentCart = cartRef.current;
+      if (currentCart.length > 0) {
+        // Handle removing specific items if mentioned
+        const itemWords = lowerCommand.split(" ");
+        let itemFound = false;
+
+        for (let i = 0; i < itemWords.length; i++) {
+          if (itemWords[i].length < 3) continue; // Skip short words
+
+          const matchedItem = currentCart.find((item) =>
+            item.name.toLowerCase().includes(itemWords[i].toLowerCase())
+          );
+
+          if (matchedItem) {
+            removeFromCart(matchedItem.id);
+            message.success(`Removed ${matchedItem.name} from cart`);
+            itemFound = true;
+            break;
+          }
+        }
+
+        // Default: remove last item if no specific item was found
+        if (!itemFound) {
+          const lastItem = currentCart[currentCart.length - 1];
+          removeFromCart(lastItem.id);
+          message.success(`Removed ${lastItem.name} from cart`);
+        }
+      } else {
+        message.error("Cart is empty");
+      }
+      return;
+    }
+
+    // Clear cart command
+    if (
+      lowerCommand.includes("clear cart") ||
+      lowerCommand.includes("empty cart")
+    ) {
+      const currentCart = cartRef.current;
+      if (currentCart.length > 0) {
+        setCart([]);
+        message.success("Cart cleared");
+      } else {
+        message.info("Cart is already empty");
+      }
+      return;
+    }
+
+    // Print bill command - Fixed to use the ref instead of state
+    if (
+      lowerCommand.includes("print bill") ||
+      lowerCommand.includes("checkout")
+    ) {
+      const currentCart = cartRef.current;
+      if (currentCart.length > 0) {
+        setPrintModalVisible(true);
+        message.success("Preparing bill for printing");
+      } else {
+        message.error("Cart is empty. Nothing to print.");
+      }
+      return;
+    }
+
+    // Close command
+    if (
+      lowerCommand.includes("close") ||
+      lowerCommand.includes("exit") ||
+      lowerCommand.includes("quit")
+    ) {
+      setVoiceEnabled(false);
+      cleanupSpeechRecognition();
+      message.info("Voice assistant disabled");
+      return;
+    }
+
+    message.info(`Command "${command}" not recognized or not implemented`);
+  };
+
+  // Start voice recognition with better error handling
+  const startListening = () => {
+    // Don't try to start if already listening or processing
+    if (
+      isListening ||
+      commandProcessingRef.current ||
+      !voiceEnabledRef.current
+    ) {
+      return;
+    }
+
+    // Don't try to start if recognition doesn't exist
+    if (!recognitionRef.current) {
+      setupSpeechRecognition();
+      // Give time for setup to complete
+      setTimeout(() => {
+        if (
+          recognitionRef.current &&
+          mountedRef.current &&
+          voiceEnabledRef.current
+        ) {
+          startListeningInternal();
+        }
+      }, 300);
+      return;
+    }
+
+    startListeningInternal();
+  };
+
+  // Internal function to actually start listening
+  const startListeningInternal = () => {
+    try {
+      recognitionRef.current.start();
+    } catch (error) {
+      console.log("Error starting recognition:", error);
+
+      // If we get an error about already running
+      if (error.name === "InvalidStateError") {
+        // Try to abort and restart
+        try {
+          recognitionRef.current.abort();
+          // Wait a bit before trying again
+          setTimeout(() => {
+            if (mountedRef.current && voiceEnabledRef.current) {
+              setupSpeechRecognition();
+              setTimeout(() => {
+                if (
+                  mountedRef.current &&
+                  voiceEnabledRef.current &&
+                  recognitionRef.current
+                ) {
+                  try {
+                    recognitionRef.current.start();
+                  } catch (finalError) {
+                    console.error("Could not restart recognition:", finalError);
+                  }
+                }
+              }, 500);
+            }
+          }, 500);
+        } catch (abortError) {
+          console.error("Error during recovery:", abortError);
+        }
+      }
+    }
+  };
+
+  // Toggle voice recognition
+  const toggleVoiceRecognition = (enabled) => {
+    setVoiceEnabled(enabled);
+
+    if (enabled) {
+      // Small delay to ensure state updates first
+      setTimeout(() => {
+        if (
+          autoRestartRef.current &&
+          !isListening &&
+          !commandProcessingRef.current
+        ) {
+          setupSpeechRecognition();
+        }
+      }, 300);
+    } else {
+      cleanupSpeechRecognition();
+      setIsListening(false);
+    }
+  };
+
+  // Toggle continuous listening
+  const toggleContinuousListening = (checked) => {
+    setAutoRestart(checked);
+
+    // If turning on continuous listening and voice is enabled, start listening
+    if (
+      checked &&
+      voiceEnabledRef.current &&
+      !isListening &&
+      !commandProcessingRef.current
+    ) {
+      setTimeout(() => {
+        if (mountedRef.current) {
+          startListening();
+        }
+      }, 300);
+    }
+  };
+
+  // Search for products
+  const handleSearch = (query) => {
+    if (!query || !query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+
+    const filtered = dummyProducts.filter(
+      (product) =>
+        product.name.toLowerCase().includes(query.toLowerCase()) ||
+        product.description.toLowerCase().includes(query.toLowerCase())
+    );
+
+    setSearchResults(filtered);
+  };
+
+  // Add product to cart
+  const addToCart = (product) => {
+    if (!product) return; // Guard against null/undefined product
+
+    setCart((prevCart) => {
+      const existingItem = prevCart.find((item) => item.id === product.id);
+      if (existingItem) {
+        return prevCart.map((item) =>
+          item.id === product.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
+      } else {
+        return [...prevCart, { ...product, quantity: 1 }];
+      }
+    });
+  };
+
+  // Remove product from cart
+  const removeFromCart = (productId) => {
+    if (!productId) return; // Guard against null/undefined productId
+
+    setCart((prevCart) => {
+      const existingItem = prevCart.find((item) => item.id === productId);
+
+      if (existingItem && existingItem.quantity > 1) {
+        return prevCart.map((item) =>
+          item.id === productId
+            ? { ...item, quantity: item.quantity - 1 }
+            : item
+        );
+      } else {
+        return prevCart.filter((item) => item.id !== productId);
+      }
+    });
+  };
+
+  // Handle printing the bill
+  const handlePrint = () => {
+    message.success("Bill printed successfully!");
+    setPrintModalVisible(false);
+    setCart([]);
+  };
+
+  // Handle modal close with proper cleanup
+  const handleModalClose = () => {
+    // Clean up speech recognition
+    cleanupSpeechRecognition();
+    setIsListening(false);
+    setVoiceEnabled(false);
+    onClose();
+  };
+
+  return (
+    <Modal
+      title={
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>Audica Voice POS System</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Text type="secondary">Voice:</Text>
+            <Switch
+              checked={voiceEnabled}
+              onChange={toggleVoiceRecognition}
+              size="small"
+            />
+            {voiceEnabled && (
+              <>
+                <Text type="secondary" style={{ marginLeft: "8px" }}>
+                  Continuous:
+                </Text>
+                <Switch
+                  checked={autoRestart}
+                  onChange={toggleContinuousListening}
+                  size="small"
+                />
+              </>
+            )}
+          </div>
+        </div>
+      }
+      open={visible}
+      onCancel={handleModalClose}
+      footer={null}
+      width={800}
+      bodyStyle={{ padding: "12px" }}
+    >
+      <Layout>
+        <Content>
+          {/* Voice Status Bar */}
+          {voiceEnabled && (
+            <div
+              style={{
+                padding: "8px",
+                marginBottom: "16px",
+                borderRadius: "8px",
+                textAlign: "center",
+                backgroundColor: isListening ? "#e6f7ff" : "#f5f5f5",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "50%",
+                    backgroundColor: isListening ? "#ff4d4f" : "#d9d9d9",
+                    animation: isListening ? "pulse 2s infinite" : "none",
+                  }}
+                ></span>
+                <Text strong style={{ marginLeft: "8px", marginRight: "8px" }}>
+                  {isListening ? "Listening..." : "Ready"}
+                </Text>
+                {processing && <Spin size="small" />}
+              </div>
+              <div
+                style={{
+                  marginTop: "4px",
+                  backgroundColor: "white",
+                  borderRadius: "4px",
+                  border: "1px solid #d9d9d9",
+                  padding: "8px",
+                }}
+              >
+                {transcript ? (
+                  <Text>{transcript}</Text>
+                ) : (
+                  <Text type="secondary">
+                    Say "search for panadol" or "select 1"
+                  </Text>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Search Bar */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              marginBottom: "16px",
+            }}
+          >
+            <Input
+              size="middle"
+              placeholder="Search for medicines..."
+              prefix={<SearchOutlined />}
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                handleSearch(e.target.value);
+              }}
+              style={{ flexGrow: 1 }}
+            />
+            <Button
+              type="primary"
+              icon={<SearchOutlined />}
+              onClick={() => handleSearch(searchQuery)}
+            >
+              Search
+            </Button>
+          </div>
+
+          {/* Main Content Area */}
+          <div style={{ display: "flex", gap: "16px" }}>
+            {/* Search Results */}
+            <div style={{ flex: 1 }}>
+              <Card
+                title="Search Results"
+                size="small"
+                style={{ maxHeight: "300px", overflow: "auto" }}
+              >
+                {searchResults.length > 0 ? (
+                  <List
+                    size="small"
+                    dataSource={searchResults}
+                    renderItem={(item, index) => (
+                      <List.Item
+                        actions={[
+                          <Button
+                            key="add"
+                            type="primary"
+                            size="small"
+                            icon={<PlusOutlined />}
+                            onClick={() => addToCart(item)}
+                          />,
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={
+                            <div
+                              style={{ display: "flex", alignItems: "center" }}
+                            >
+                              <Tag color="blue">{index + 1}</Tag>
+                              <span style={{ marginLeft: "8px" }}>
+                                {item.name}
+                              </span>
+                            </div>
+                          }
+                          description={item.description}
+                        />
+                        <div>
+                          <Text strong>${item.price.toFixed(2)}</Text>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                ) : (
+                  <Empty
+                    description="No results found"
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                )}
+              </Card>
+            </div>
+
+            {/* Cart */}
+            <div style={{ width: "288px" }}>
+              <Card
+                title={
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span>Cart</span>
+                    <Badge count={cart.length} showZero />
+                  </div>
+                }
+                size="small"
+                style={{ maxHeight: "300px", overflow: "auto" }}
+                extra={
+                  cart.length > 0 && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<PrinterOutlined />}
+                      onClick={() => setPrintModalVisible(true)}
+                    >
+                      Bill
+                    </Button>
+                  )
+                }
+              >
+                {cart.length > 0 ? (
+                  <>
+                    <List
+                      size="small"
+                      dataSource={cart}
+                      renderItem={(item) => (
+                        <List.Item
+                          actions={[
+                            <Button
+                              key="minus"
+                              icon={<MinusOutlined />}
+                              size="small"
+                              onClick={() => removeFromCart(item.id)}
+                            />,
+                            <Button
+                              key="plus"
+                              icon={<PlusOutlined />}
+                              size="small"
+                              onClick={() => addToCart(item)}
+                            />,
+                            <Button
+                              key="delete"
+                              icon={<DeleteOutlined />}
+                              size="small"
+                              danger
+                              onClick={() => {
+                                setCart((prev) =>
+                                  prev.filter(
+                                    (cartItem) => cartItem.id !== item.id
+                                  )
+                                );
+                              }}
+                            />,
+                          ]}
+                        >
+                          <List.Item.Meta
+                            title={item.name}
+                            description={`$${item.price.toFixed(2)} x ${
+                              item.quantity
+                            }`}
+                          />
+                          <div>
+                            <Text strong>
+                              ${(item.price * item.quantity).toFixed(2)}
+                            </Text>
+                          </div>
+                        </List.Item>
+                      )}
+                    />
+                    <Divider style={{ margin: "8px 0" }} />
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <Text strong>Total:</Text>
+                      <Text strong>${cartTotal.toFixed(2)}</Text>
+                    </div>
+                  </>
+                ) : (
+                  <Empty
+                    description="Your cart is empty"
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                )}
+              </Card>
+            </div>
+          </div>
+
+          {/* Voice Commands Log */}
+          {voiceEnabled && (
+            <Card
+              title="Voice Commands Log"
+              size="small"
+              style={{
+                marginTop: "16px",
+                maxHeight: "150px",
+                overflow: "auto",
+              }}
+            >
+              {commandLog.length > 0 ? (
+                <List
+                  size="small"
+                  dataSource={commandLog}
+                  renderItem={(log) => (
+                    <List.Item>
+                      <Text type="secondary">{log.timestamp}: </Text>
+                      <Text>{log.raw}</Text>
+                      {log.raw !== log.corrected && (
+                        <>
+                          <Text> → </Text>
+                          <Text type="success">{log.corrected}</Text>
+                        </>
+                      )}
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Empty
+                  description="No commands yet"
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                />
+              )}
+            </Card>
+          )}
+
+          {/* Help Text */}
+          <div style={{ marginTop: "16px" }}>
+            <Divider orientation="left">Voice Commands</Divider>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              <Tag icon={<SoundOutlined />} color="blue">
+                search for [medicine]
+              </Tag>
+              <Tag icon={<SoundOutlined />} color="blue">
+                select [number]
+              </Tag>
+              <Tag icon={<SoundOutlined />} color="blue">
+                add to cart
+              </Tag>
+              <Tag icon={<SoundOutlined />} color="blue">
+                remove [item]
+              </Tag>
+              <Tag icon={<SoundOutlined />} color="blue">
+                clear cart
+              </Tag>
+              <Tag icon={<SoundOutlined />} color="blue">
+                print bill
+              </Tag>
+              <Tag icon={<SoundOutlined />} color="blue">
+                close
+              </Tag>
+            </div>
+          </div>
+        </Content>
+      </Layout>
+
+      {/* Print Bill Modal */}
+      <Modal
+        title="Bill for Printing"
+        open={printModalVisible}
+        onCancel={() => setPrintModalVisible(false)}
+        footer={[
+          <Button key="back" onClick={() => setPrintModalVisible(false)}>
+            Cancel
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            icon={<PrinterOutlined />}
+            onClick={handlePrint}
+          >
+            Print
+          </Button>,
+        ]}
+      >
+        <div style={{ padding: "16px" }}>
+          <Title level={4} style={{ textAlign: "center" }}>
+            Pharmacy Receipt
+          </Title>
+          <Divider style={{ margin: "12px 0" }} />
+          <List
+            size="small"
+            dataSource={cart}
+            renderItem={(item) => (
+              <List.Item style={{ padding: "4px 0" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    width: "100%",
+                  }}
+                >
+                  <Text>
+                    {item.name} x {item.quantity}
+                  </Text>
+                  <Text>${(item.price * item.quantity).toFixed(2)}</Text>
+                </div>
+              </List.Item>
+            )}
+          />
+          <Divider style={{ margin: "12px 0" }} />
+          <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <Text strong>Total Amount:</Text>
+            <Text strong>${cartTotal.toFixed(2)}</Text>
+          </div>
+          <div style={{ marginTop: "16px", textAlign: "center" }}>
+            <Text type="secondary">Thank you for your purchase!</Text>
+          </div>
+        </div>
+      </Modal>
+    </Modal>
+  );
+};
+
+export default PharmacyPOSModal;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Home component here under
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import React, { useEffect, useState, useCallback, useRef } from "react";
+// import { RiCustomerService2Line } from "react-icons/ri";
+import SellingBox from "./SellingBox";
+import SellingExtra from "./SellingExtra";
+import SellingTotal from "./SellingTotal";
+import { useProductStore } from "../Store/productStore";
+import useCartStore from "../Store/useCartStore";
+import useSaleStore from "../Store/useSaleStore";
+import toast from "react-hot-toast";
+import { motion } from "framer-motion";
+// import ProductReturnModal from "./ProductReturnModal";
+// import RetailerReturnModal from "./ProductReturnModal";
+import PharmacyReturnModal from "./ProductReturnModal";
+// import VoiceRecorder from "../components/Audio/VoiceRecorder";
+import { processCommand } from "../components/Audio/processCommand";
+// import VoiceControlModal from "./VoiceModal";
+// import useRecorder from "../components/Audio/useRecorder";
+import { FaMicrophone } from "react-icons/fa";
+
+import { Button, message, Badge } from "antd";
+import PharmacyPOSModal from "./Voice/OpenAi";
+import VoiceButton from "../components/Small_Components/VoiceModalButton";
+// import { AudioOutlined, ShoppingCartOutlined } from "@ant-design/icons";
+// import VoiceCommandModal from "./VoiceModal";
+// import PassiveVoiceListener from "./Voice/VoiceWithWhisper";
+// import VoicePOSSystem from "./Voice/OpenAi";
+// import PharmacyPOSModal from "./Voice/OpenAi";
+
+const Home = () => {
+  const [returnModalVisible, setReturnModalVisible] = useState(false);
+  // const { recording, startRecording, stopRecording } = useRecorder();
+  const [transcription, setTranscription] = useState("");
+
+  const handleTranscription = (text) => {
+    setTranscription(text);
+    processCommand(text); // Process voice command
+  };
+
+  const { fetchProducts, products } = useProductStore();
+  const {
+    addToCart,
+    cartItems,
+    updateQuantity,
+    removeFromCart,
+    clearCart,
+    prepareSaleData,
+  } = useCartStore();
+  const { createSale } = useSaleStore();
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filteredProducts, setFilteredProducts] = useState([]);
+  const [selectedProductIndex, setSelectedProductIndex] = useState(-1);
+  const [isEditingQuantity, setIsEditingQuantity] = useState(false);
+  const [quantityInput, setQuantityInput] = useState("");
+  const [cartSelectedIndex, setCartSelectedIndex] = useState(-1);
+  const [isCartEditing, setIsCartEditing] = useState(false);
+  const [cartQuantityInput, setCartQuantityInput] = useState("");
+  const [isProcessingSale, setIsProcessingSale] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  // Refs for input focus management
+  const searchInputRef = useRef(null);
+  const quantityInputRef = useRef(null);
+  const cartQuantityInputRef = useRef(null);
+
+  // Fetch products on component mount
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  // Filter products based on the search query
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setFilteredProducts(products);
+    } else {
+      const filtered = products.filter(
+        (product) =>
+          product?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (product?.categoryInfo?.name &&
+            product?.categoryInfo.name
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase())) ||
+          (product?.genericName &&
+            product?.genericName
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase())) ||
+          (product?.barcode &&
+            product?.barcode.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+      setFilteredProducts(filtered);
+    }
+  }, [products, searchQuery]);
+
+  // Reset modal state
+  const resetModalState = useCallback(() => {
+    setSelectedProductIndex(-1);
+    setQuantityInput("");
+    setIsEditingQuantity(false);
+    setIsModalOpen(false);
+  }, []);
+
+  // Reset cart editing state
+  const resetCartEditingState = useCallback(() => {
+    setIsCartEditing(false);
+    setCartQuantityInput("");
+  }, []);
+
+  // Open search modal
+  const openSearchModal = useCallback(() => {
+    setIsModalOpen(true);
+    setSearchQuery("");
+    setSelectedProductIndex(-1);
+    setTimeout(() => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+      }
+    }, 100);
+  }, []);
+
+  // Handle product selection and quantity input
+  const handleSelectProduct = useCallback(() => {
+    if (selectedProductIndex >= 0) {
+      if (isEditingQuantity) {
+        const selectedProduct = filteredProducts[selectedProductIndex];
+        const quantity = parseInt(quantityInput, 10);
+
+        if (quantity > 0) {
+          // No batch ID needed as it will be handled in backend
+          addToCart(selectedProduct, quantity);
+          resetModalState();
+        }
+      } else {
+        setIsEditingQuantity(true);
+        setTimeout(() => {
+          if (quantityInputRef.current) {
+            quantityInputRef.current.focus();
+          }
+        }, 100);
+      }
+    }
+  }, [
+    selectedProductIndex,
+    isEditingQuantity,
+    filteredProducts,
+    quantityInput,
+    addToCart,
+    resetModalState,
+  ]);
+
+  // Handle cart item selection and updating
+  const handleCartItemUpdate = useCallback(() => {
+    if (cartSelectedIndex >= 0) {
+      if (isCartEditing) {
+        const quantity = parseInt(cartQuantityInput, 10);
+        if (quantity > 0) {
+          const selectedItem = cartItems[cartSelectedIndex];
+          // Pass both product ID and batch ID to updateQuantity
+          updateQuantity(
+            selectedItem.product._id,
+            selectedItem.batchId, // Add the missing batchId parameter
+            quantity
+          );
+        }
+        console.log("Quantity:", quantity);
+        resetCartEditingState();
+        setCartSelectedIndex(cartSelectedIndex);
+      } else {
+        setIsCartEditing(true);
+        setCartQuantityInput(
+          cartItems[cartSelectedIndex]?.quantity.toString() || ""
+        );
+        setTimeout(() => {
+          if (cartQuantityInputRef.current) {
+            cartQuantityInputRef.current.focus();
+          }
+        }, 100);
+      }
+    }
+  }, [
+    cartSelectedIndex,
+    isCartEditing,
+    cartQuantityInput,
+    cartItems,
+    updateQuantity,
+    resetCartEditingState,
+  ]);
+
+  const handleCompleteSale = useCallback(async () => {
+    if (cartItems.length === 0) {
+      toast.error("Cannot complete sale: Cart is empty");
+      return;
+    }
+
+    setIsProcessingSale(true);
+    try {
+      // Prepare sale data from cart store
+      const saleData = prepareSaleData();
+
+      // Create sale through sale store
+      const createdSale = await createSale(saleData);
+
+      // Show success toast
+      toast.success(`Sale completed. Invoice #${createdSale.invoiceNumber}`);
+
+      // Clear cart after successful sale
+      clearCart();
+    } catch (error) {
+      // Handle sale creation error
+      toast.error(`Failed to complete sale: ${error.message}`);
+    } finally {
+      fetchProducts();
+      setIsProcessingSale(false);
+    }
+  }, [cartItems.length, prepareSaleData, createSale, clearCart, fetchProducts]);
+
+  const handleSaleKeyDown = useCallback(
+    (e) => {
+      // F4 to complete sale
+      if (e.key === "F4" && !isModalOpen) {
+        e.preventDefault();
+        handleCompleteSale();
+      }
+    },
+    [isModalOpen, handleCompleteSale]
+  );
+
+  // Keyboard navigation for product search modal
+  const handleSearchKeyDown = useCallback(
+    (e) => {
+      if (e.key === "F1") {
+        e.preventDefault();
+        openSearchModal();
+      }
+
+      if (isModalOpen) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setSelectedProductIndex((prev) =>
+            prev < filteredProducts.length - 1 ? prev + 1 : prev
+          );
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setSelectedProductIndex((prev) => (prev > 0 ? prev - 1 : 0));
+        } else if (e.key === "Enter") {
+          e.preventDefault();
+          handleSelectProduct();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          if (isEditingQuantity) {
+            setIsEditingQuantity(false);
+            setQuantityInput("");
+            if (searchInputRef.current) {
+              searchInputRef.current.focus();
+            }
+          } else {
+            resetModalState();
+          }
+        }
+      }
+    },
+    [
+      isModalOpen,
+      filteredProducts.length,
+      selectedProductIndex,
+      isEditingQuantity,
+      openSearchModal,
+      handleSelectProduct,
+      resetModalState,
+    ]
+  );
+
+  // Keyboard navigation for the cart
+  const handleCartKeyDown = useCallback(
+    (e) => {
+      if (!isModalOpen) {
+        if (e.key === "F2") {
+          e.preventDefault();
+          setCartSelectedIndex(cartItems.length > 0 ? 0 : -1);
+        }
+
+        if (cartItems.length > 0) {
+          if (!isCartEditing) {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setCartSelectedIndex((prev) =>
+                prev < cartItems.length - 1 ? prev + 1 : prev
+              );
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setCartSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+            } else if (e.key === "Enter" && cartSelectedIndex >= 0) {
+              e.preventDefault();
+              handleCartItemUpdate();
+            } else if (e.key === "Delete" && cartSelectedIndex >= 0) {
+              e.preventDefault();
+              removeFromCart(cartItems[cartSelectedIndex].product._id);
+              // Reset selection if the last item was deleted
+              if (cartSelectedIndex >= cartItems.length - 1) {
+                setCartSelectedIndex(Math.max(0, cartItems.length - 2));
+              }
+            } else if (e.key === "F3") {
+              e.preventDefault();
+              clearCart();
+              setCartSelectedIndex(-1);
+            }
+          } else if (e.key === "Enter" && cartSelectedIndex >= 0) {
+            e.preventDefault();
+            handleCartItemUpdate();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            resetCartEditingState();
+          }
+        }
+      }
+    },
+    [
+      isModalOpen,
+      cartItems.length,
+      cartSelectedIndex,
+      isCartEditing,
+      handleCartItemUpdate,
+      removeFromCart,
+      resetCartEditingState,
+      clearCart,
+    ]
+  );
+
+  // Add event listeners for keyboard actions
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      handleSearchKeyDown(e);
+      handleCartKeyDown(e);
+      handleSaleKeyDown(e);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleSearchKeyDown, handleCartKeyDown, handleSaleKeyDown]);
+
+  // Handle adding to cart from modal
+  const handleAddToCart = useCallback(() => {
+    if (selectedProductIndex >= 0 && quantityInput) {
+      const selectedProduct = filteredProducts[selectedProductIndex];
+      const quantity = parseInt(quantityInput, 10);
+
+      if (selectedProduct?.totalStock === 0) {
+        toast.error("This product is out of stock!", { position: "top-right" });
+        return;
+      }
+      if (quantity > 0) {
+        // No batch ID needed as it will be handled in backend
+        addToCart(selectedProduct, quantity);
+        resetModalState();
+      }
+    }
+  }, [
+    selectedProductIndex,
+    quantityInput,
+    filteredProducts,
+    addToCart,
+    resetModalState,
+  ]);
+
+  // Get price for display (lowestPrice or a calculated price)
+  const getProductPrice = useCallback((product) => {
+    return product.lowestPrice || product.highestPrice || 0;
+  }, []);
+
+  const sampleMedicines = [
+    { id: 1, name: "Panadol", price: 5.99, stock: 100 },
+    { id: 2, name: "Panadol Extra", price: 7.99, stock: 75 },
+    { id: 3, name: "Paracetamol 500mg", price: 4.5, stock: 150 },
+    { id: 4, name: "Ibuprofen 200mg", price: 6.75, stock: 80 },
+    { id: 5, name: "Aspirin", price: 3.99, stock: 120 },
+    { id: 6, name: "Amoxicillin", price: 12.99, stock: 50 },
+    { id: 7, name: "Azithromycin", price: 15.49, stock: 45 },
+    { id: 8, name: "Calpol", price: 8.25, stock: 60 },
+    { id: 9, name: "Vitamin C", price: 9.99, stock: 90 },
+    { id: 10, name: "Vitamin D3", price: 11.5, stock: 70 },
+  ];
+
+  const [cart, setCart] = useState([]);
+  const searchMedicine = async (term) => {
+    // Simulate API call with a small delay
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const results = sampleMedicines.filter((med) =>
+          med.name.toLowerCase().includes(term.toLowerCase())
+        );
+        resolve(results);
+      }, 500);
+    });
+  };
+
+  // Add to cart function
+  const handleAddToCart2 = (item) => {
+    // Check if item already exists in cart
+    const existingItemIndex = cart.findIndex(
+      (cartItem) => cartItem.id === item.id
+    );
+
+    if (existingItemIndex !== -1) {
+      // Update existing item
+      const updatedCart = [...cart];
+      updatedCart[existingItemIndex].quantity += item.quantity;
+      updatedCart[existingItemIndex].total =
+        updatedCart[existingItemIndex].price *
+        updatedCart[existingItemIndex].quantity;
+      setCart(updatedCart);
+    } else {
+      // Add new item
+      setCart([...cart, item]);
+    }
+
+    message.success(`Added ${item.quantity} ${item.name} to cart`);
+  };
+
+  // Print bill function
+  const handlePrintBill = (cartItems) => {
+    // In a real app, this would connect to a printer or generate a printable document
+    message.success("Bill printed successfully!");
+    console.log("Printing bill for items:", cartItems);
+    // You might want to clear the cart after printing
+    setCart([]);
+  };
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <VoiceButton onClick={() => setIsModalVisible(true)} />
+
+      <PharmacyPOSModal
+        visible={isModalVisible}
+        onClose={() => setIsModalVisible(false)}
+      />
+      <SellingBox />
+      <div className="flex flex-col md:flex-row gap-4 p-4">
+        <div className="md:w-3/4 bg-gray-50 rounded shadow-md">
+          <h2 className="text-2xl font-bold text-center mb-4 p-2 bg-blue-600 text-white rounded-t">
+            Retail Management - Selling Table
+          </h2>
+          <div className="p-4">
+            <div className="mb-4 flex justify-between">
+              <div className="flex gap-5">
+                <button
+                  className="bg-blue-500 text-white px-4 py-2 rounded flex items-center gap-2"
+                  onClick={openSearchModal}
+                >
+                  <span>Search Products</span>
+                  <span className="text-xs border border-white rounded px-1">
+                    F1
+                  </span>
+                </button>
+                <button
+                  className="bg-red-500 text-white px-4 py-2 rounded flex items-center gap-2"
+                  onClick={() => setReturnModalVisible(true)}
+                >
+                  <span>Return</span>
+                </button>
+
+                <PharmacyReturnModal
+                  visible={returnModalVisible}
+                  onClose={() => setReturnModalVisible(false)}
+                  // product={productData}
+                />
+              </div>
+              <div className="flex gap-2">
+                {cartItems.length > 0 && (
+                  <>
+                    <button
+                      className="bg-blue-500 text-white px-4 py-2 rounded flex items-center gap-2"
+                      onClick={() => setCartSelectedIndex(0)}
+                    >
+                      <span>Select Cart</span>
+                      <span className="text-xs border border-white rounded px-1">
+                        F2
+                      </span>
+                    </button>
+                    <button
+                      className="bg-red-500 text-white px-4 py-2 rounded flex items-center gap-2"
+                      onClick={clearCart}
+                    >
+                      <span>Clear Cart</span>
+                      <span className="text-xs border border-white rounded px-1">
+                        F3
+                      </span>
+                    </button>
+                    <button
+                      className={`${
+                        isProcessingSale
+                          ? "bg-gray-400 cursor-not-allowed"
+                          : "bg-green-500 hover:bg-green-600"
+                      } text-white px-4 py-2 rounded flex items-center gap-2`}
+                      onClick={handleCompleteSale}
+                      disabled={isProcessingSale}
+                    >
+                      <span>Complete Sale</span>
+                      <span className="text-xs border border-white rounded px-1">
+                        F4
+                      </span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="table-auto border-collapse w-full bg-white shadow-md rounded">
+                <thead>
+                  <tr className="bg-gray-200 text-gray-800 font-medium">
+                    <th className="border px-4 py-2">Sr#</th>
+                    <th className="border px-4 py-2">Product Code</th>
+                    <th className="border px-4 py-2">Product Name</th>
+                    <th className="border px-4 py-2">Generic Name</th>
+                    <th className="border px-4 py-2">Rate/Unit</th>
+                    <th className="border px-4 py-2">Qty</th>
+                    <th className="border px-4 py-2">Discount</th>
+                    <th className="border px-4 py-2">Total</th>
+                    <th className="border px-4 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cartItems.length > 0 ? (
+                    cartItems.map((item, index) => (
+                      <tr
+                        key={item.product._id}
+                        className={`hover:bg-gray-100 ${
+                          cartSelectedIndex === index ? "bg-blue-100" : ""
+                        }`}
+                        onClick={() => setCartSelectedIndex(index)}
+                      >
+                        <td className="border px-4 py-2 text-center">
+                          {index + 1}
+                        </td>
+                        <td className="border px-4 py-2">
+                          {item.product._id.slice(0, 8)}
+                        </td>
+                        <td className="border px-4 py-2">
+                          {item.product.name}
+                        </td>
+                        <td className="border px-4 py-2">
+                          {item.product.genericName || "-"}
+                        </td>
+                        <td className="border px-4 py-2 text-right">
+                          Rs. {getProductPrice(item.product).toFixed(2)}
+                        </td>
+                        <td className="border px-4 py-2 text-center">
+                          {cartSelectedIndex === index && isCartEditing ? (
+                            <input
+                              type="text"
+                              value={cartQuantityInput}
+                              className="border rounded px-2 py-1 w-16 text-center"
+                              ref={cartQuantityInputRef}
+                              onChange={(e) => {
+                                const newValue = e.target.value.replace(
+                                  /[^0-9]/g,
+                                  ""
+                                );
+                                setCartQuantityInput(newValue);
+                              }}
+                              onBlur={() => {
+                                const quantity = parseInt(
+                                  cartQuantityInput,
+                                  10
+                                );
+                                if (quantity > 0) {
+                                  updateQuantity(
+                                    cartItems[cartSelectedIndex].product._id,
+                                    quantity
+                                  );
+                                }
+                                resetCartEditingState();
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  handleCartItemUpdate();
+                                } else if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  resetCartEditingState();
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div
+                              className="cursor-pointer"
+                              onClick={() => {
+                                setCartSelectedIndex(index);
+                                setIsCartEditing(true);
+                                setCartQuantityInput(item.quantity.toString());
+                                setTimeout(() => {
+                                  if (cartQuantityInputRef.current) {
+                                    cartQuantityInputRef.current.focus();
+                                  }
+                                }, 100);
+                              }}
+                            >
+                              {item.quantity}
+                            </div>
+                          )}
+                        </td>
+                        <td className="border px-4 py-2 text-center">
+                          {item.discount || 0}%
+                        </td>
+                        <td className="border px-4 py-2 text-right">
+                          Rs.
+                          {(
+                            getProductPrice(item.product) *
+                            item.quantity *
+                            (1 - (item.discount || 0) / 100)
+                          ).toFixed(2)}
+                        </td>
+                        <td className="border px-4 py-2 text-center">
+                          <button
+                            className="text-red-600 hover:text-red-800 hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              console.log("this runs");
+                              removeFromCart(item.product._id);
+                              console.log("this runs as well", item.product);
+                              if (cartSelectedIndex >= cartItems.length - 1) {
+                                setCartSelectedIndex(
+                                  Math.max(0, cartItems.length - 2)
+                                );
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan="9"
+                        className="border px-4 py-8 text-center text-gray-500"
+                      >
+                        No items in cart. Press F1 to search and add products.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <SellingTotal />
+      </div>
+      <SellingExtra />
+
+      {/* Product Search Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg p-6 max-w-3xl w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Search Products</h2>
+              <div className="text-sm text-gray-500">
+                <span className="mr-2">Keyboard Shortcuts:</span>
+                <kbd className="border px-1 rounded">↑</kbd>/
+                <kbd className="border px-1 rounded">↓</kbd> navigate,
+                <kbd className="border px-1 rounded ml-1">Enter</kbd> select,
+                <kbd className="border px-1 rounded ml-1">Esc</kbd> close
+              </div>
+            </div>
+            <input
+              type="text"
+              className="w-full p-2 border rounded mb-4"
+              placeholder="Search by name, generic name, barcode or category..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              ref={searchInputRef}
+            />
+            <div className="overflow-y-auto max-h-96 mb-4">
+              <table className="min-w-full border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="px-4 py-2 border">Name</th>
+                    <th className="px-4 py-2 border">Generic Name</th>
+                    <th className="px-4 py-2 border">Category</th>
+                    <th className="px-4 py-2 border">Form</th>
+                    <th className="px-4 py-2 border">Price</th>
+                    <th className="px-4 py-2 border">Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProducts.length > 0 ? (
+                    filteredProducts.map((product, index) => (
+                      <tr
+                        key={product._id}
+                        className={`cursor-pointer hover:bg-gray-100 ${
+                          selectedProductIndex === index ? "bg-blue-100" : ""
+                        }`}
+                        onClick={() => setSelectedProductIndex(index)}
+                      >
+                        <td className="px-4 py-2 border">{product.name}</td>
+                        <td className="px-4 py-2 border">
+                          {product.genericName || "-"}
+                        </td>
+                        <td className="px-4 py-2 border">
+                          {product.categoryInfo?.name || "-"}
+                        </td>
+                        <td className="px-4 py-2 border">
+                          {product.dosageForm || "-"}
+                        </td>
+                        <td className="px-4 text-right py-2 border">
+                          Rs. {getProductPrice(product).toFixed(2)}
+                        </td>
+                        <td className="px-4 text-center py-2 border">
+                          {product.totalStock || 0}
+                          {product.isLowStock && (
+                            <span className="ml-2 text-red-500">Low</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan="6"
+                        className="px-4 py-2 text-center text-gray-500"
+                      >
+                        No products found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Quantity Input (appears directly after selecting a product) */}
+
+            {selectedProductIndex >= 0 && isEditingQuantity && (
+              <div className="mb-4">
+                <h3 className="text-lg font-bold mb-2">Enter Quantity</h3>
+                <input
+                  type="number"
+                  className="w-full p-2 border rounded"
+                  placeholder="Enter quantity"
+                  value={quantityInput}
+                  onChange={(e) => setQuantityInput(e.target.value)}
+                  min="1"
+                  ref={quantityInputRef}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddToCart();
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      setIsEditingQuantity(false);
+                      setQuantityInput("");
+                      if (searchInputRef.current) {
+                        searchInputRef.current.focus();
+                      }
+                    }
+                  }}
+                />
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              {selectedProductIndex >= 0 && isEditingQuantity && (
+                <button
+                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded"
+                  disabled={!quantityInput}
+                  onClick={handleAddToCart}
+                >
+                  Add to Cart
+                </button>
+              )}
+              <button
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                onClick={resetModalState}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Home;

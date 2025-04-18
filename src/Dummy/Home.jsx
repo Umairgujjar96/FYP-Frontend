@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
-import { RiCustomerService2Line } from "react-icons/ri";
 import SellingBox from "./SellingBox";
 import SellingExtra from "./SellingExtra";
 import SellingTotal from "./SellingTotal";
@@ -7,27 +6,12 @@ import { useProductStore } from "../Store/productStore";
 import useCartStore from "../Store/useCartStore";
 import useSaleStore from "../Store/useSaleStore";
 import toast from "react-hot-toast";
-// import ProductReturnModal from "./ProductReturnModal";
-// import RetailerReturnModal from "./ProductReturnModal";
 import PharmacyReturnModal from "./ProductReturnModal";
-import VoiceRecorder from "../components/Audio/VoiceRecorder";
-import { processCommand } from "../components/Audio/processCommand";
-import VoiceControlModal from "./VoiceModal";
-// import useRecorder from "../components/Audio/useRecorder";
-import { Button, message, Badge } from "antd";
-import { AudioOutlined, ShoppingCartOutlined } from "@ant-design/icons";
-import VoiceCommandModal from "./VoiceModal";
-import PassiveVoiceListener from "./Voice/VoiceWithWhisper";
+import PharmacyPOSModal from "./Voice/OpenAi";
+import VoiceButton from "../components/Small_Components/VoiceModalButton";
 
 const Home = () => {
   const [returnModalVisible, setReturnModalVisible] = useState(false);
-  // const { recording, startRecording, stopRecording } = useRecorder();
-  const [transcription, setTranscription] = useState("");
-
-  const handleTranscription = (text) => {
-    setTranscription(text);
-    processCommand(text); // Process voice command
-  };
 
   const { fetchProducts, products } = useProductStore();
   const {
@@ -50,6 +34,7 @@ const Home = () => {
   const [isCartEditing, setIsCartEditing] = useState(false);
   const [cartQuantityInput, setCartQuantityInput] = useState("");
   const [isProcessingSale, setIsProcessingSale] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
 
   // Refs for input focus management
   const searchInputRef = useRef(null);
@@ -362,108 +347,14 @@ const Home = () => {
     return product.lowestPrice || product.highestPrice || 0;
   }, []);
 
-  const sampleMedicines = [
-    { id: 1, name: "Panadol", price: 5.99, stock: 100 },
-    { id: 2, name: "Panadol Extra", price: 7.99, stock: 75 },
-    { id: 3, name: "Paracetamol 500mg", price: 4.5, stock: 150 },
-    { id: 4, name: "Ibuprofen 200mg", price: 6.75, stock: 80 },
-    { id: 5, name: "Aspirin", price: 3.99, stock: 120 },
-    { id: 6, name: "Amoxicillin", price: 12.99, stock: 50 },
-    { id: 7, name: "Azithromycin", price: 15.49, stock: 45 },
-    { id: 8, name: "Calpol", price: 8.25, stock: 60 },
-    { id: 9, name: "Vitamin C", price: 9.99, stock: 90 },
-    { id: 10, name: "Vitamin D3", price: 11.5, stock: 70 },
-  ];
-
-  const [isVoiceModalVisible, setIsVoiceModalVisible] = useState(false);
-  const [cart, setCart] = useState([]);
-  const searchMedicine = async (term) => {
-    // Simulate API call with a small delay
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const results = sampleMedicines.filter((med) =>
-          med.name.toLowerCase().includes(term.toLowerCase())
-        );
-        resolve(results);
-      }, 500);
-    });
-  };
-
-  // Add to cart function
-  const handleAddToCart2 = (item) => {
-    // Check if item already exists in cart
-    const existingItemIndex = cart.findIndex(
-      (cartItem) => cartItem.id === item.id
-    );
-
-    if (existingItemIndex !== -1) {
-      // Update existing item
-      const updatedCart = [...cart];
-      updatedCart[existingItemIndex].quantity += item.quantity;
-      updatedCart[existingItemIndex].total =
-        updatedCart[existingItemIndex].price *
-        updatedCart[existingItemIndex].quantity;
-      setCart(updatedCart);
-    } else {
-      // Add new item
-      setCart([...cart, item]);
-    }
-
-    message.success(`Added ${item.quantity} ${item.name} to cart`);
-  };
-
-  // Print bill function
-  const handlePrintBill = (cartItems) => {
-    // In a real app, this would connect to a printer or generate a printable document
-    message.success("Bill printed successfully!");
-    console.log("Printing bill for items:", cartItems);
-    // You might want to clear the cart after printing
-    setCart([]);
-  };
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* <div className="flex justify-between p-3 bg-white shadow-sm">
-        <RiCustomerService2Line className="text-2xl mt-2 cursor-pointer text-blue-600" />
-      </div> */}
-      {/* <div>
-        <h1>Audica - Voice Controlled Retail</h1>
-        <VoiceRecorder onTranscribe={handleTranscription} />
-        <p>Transcription: {transcription}</p>
-      </div> */}
+      <VoiceButton onClick={() => setIsModalVisible(true)} />
 
-      {/* <div className="flex items-center">
-        <Badge count={cart.length} showZero>
-          <Button icon={<ShoppingCartOutlined />} size="large" className="mr-4">
-            Cart
-          </Button>
-        </Badge>
-        <Button
-          type="primary"
-          icon={<AudioOutlined />}
-          size="large"
-          onClick={() => setIsVoiceModalVisible(true)}
-        >
-          Voice Control
-        </Button>
-      </div> */}
-
-      {/* <VoiceControlModal
-        isVisible={isVoiceModalVisible}
-        onClose={() => setIsVoiceModalVisible(false)}
-        onAddToCart={handleAddToCart}
-        onPrintBill={handlePrintBill}
-        searchMedicine={searchMedicine}
-        medicineList={sampleMedicines}
-      /> */}
-
-      {/* <VoiceCommandModal
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        voiceInput={"search zara dhol"} // this would come from Web Speech API
-      /> */}
-
-      <PassiveVoiceListener />
-
+      <PharmacyPOSModal
+        visible={isModalVisible}
+        onClose={() => setIsModalVisible(false)}
+      />
       <SellingBox />
       <div className="flex flex-col md:flex-row gap-4 p-4">
         <div className="md:w-3/4 bg-gray-50 rounded shadow-md">
