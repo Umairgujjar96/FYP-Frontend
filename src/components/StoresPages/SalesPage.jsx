@@ -127,420 +127,615 @@ const SalesPage = () => {
 
         // Generate the invoice HTML with classic professional styling
         const printContent = `
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Invoice #${saleData.invoiceNumber || "N/A"}</title>
-            <style>
-              @import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Open+Sans:wght@400;600&display=swap');
-              
-              body {
-                font-family: 'Open Sans', serif;
-                margin: 0;
-                padding: 30px;
-                color: #333;
-                background-color: #fff;
-                line-height: 1.6;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice #${saleData.invoiceNumber || "N/A"}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@400;700&display=swap');
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      color: #222;
+      background-color: #f5f5f5;
+      line-height: 1.6;
+      padding: 30px;
+    }
+    
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 40px;
+      background-color: #222;
+      color: white;
+      position: relative;
+    }
+    
+    .invoice-header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 40px;
+      right: 40px;
+      height: 3px;
+      background: repeating-linear-gradient(to right, #fff, #fff 8px, transparent 8px, transparent 16px);
+    }
+    
+    .store-name {
+      font-family: 'Merriweather', serif;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    
+    .store-info {
+      font-size: 14px;
+      font-weight: 300;
+      opacity: 0.9;
+    }
+    
+    .invoice-info {
+      text-align: right;
+    }
+    
+    .invoice-title {
+      font-family: 'Merriweather', serif;
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    
+    .invoice-details {
+      font-size: 14px;
+      font-weight: 300;
+      opacity: 0.9;
+    }
+    
+    .invoice-status {
+      display: inline-block;
+      padding: 6px 14px;
+      margin-bottom: 15px;
+      border-radius: 30px;
+      font-weight: 500;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .status-paid {
+      background-color: #e8f5e9;
+      color: #2e7d32;
+      border: 1px solid #a5d6a7;
+    }
+    
+    .status-pending {
+      background-color: #fff8e1;
+      color: #f57f17;
+      border: 1px solid #ffe082;
+    }
+    
+    .status-failed {
+      background-color: #ffebee;
+      color: #c62828;
+      border: 1px solid #ef9a9a;
+    }
+    
+    .status-unknown {
+      background-color: #f5f5f5;
+      color: #616161;
+      border: 1px solid #e0e0e0;
+    }
+    
+    .invoice-body {
+      padding: 40px;
+    }
+    
+    .section-title {
+      font-family: 'Merriweather', serif;
+      font-size: 18px;
+      font-weight: 600;
+      margin: 30px 0 20px;
+      position: relative;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #222;
+    }
+    
+    .section-title:first-of-type {
+      margin-top: 0;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    
+    th {
+      background-color: #f3f3f3;
+      font-weight: 600;
+      text-align: left;
+      padding: 15px;
+      border-bottom: 2px solid #ddd;
+    }
+    
+    td {
+      padding: 15px;
+      border-bottom: 1px solid #eee;
+      vertical-align: top;
+    }
+    
+    tr:last-child td {
+      border-bottom: none;
+    }
+    
+    tr:nth-child(odd) {
+      background-color: #f9f9f9;
+    }
+    
+    .text-right {
+      text-align: right;
+    }
+    
+    .summary-container {
+      display: flex;
+      justify-content: flex-end;
+    }
+    
+    .summary-table {
+      width: 350px;
+      font-size: 14px;
+      border: 2px solid #222;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .summary-table td {
+      padding: 12px 20px;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .summary-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .summary-table .label {
+      color: #555;
+      font-weight: 500;
+    }
+    
+    .summary-table .value {
+      font-weight: 600;
+      text-align: right;
+    }
+    
+    .total-row td {
+      padding: 18px 20px;
+      font-weight: 700;
+      font-size: 16px;
+      background-color: #222;
+      color: white;
+    }
+    
+    .total-row .label {
+      color: #fff;
+    }
+    
+    .footer {
+      margin-top: 60px;
+      padding-top: 30px;
+      border-top: 1px dashed #ccc;
+      text-align: center;
+      font-size: 14px;
+      color: #555;
+    }
+    
+    .footer p {
+      margin-bottom: 10px;
+    }
+    
+    .footer strong {
+      color: #333;
+    }
+    
+    .no-print {
+      text-align: right;
+      margin-bottom: 20px;
+    }
+    
+    .print-button {
+      padding: 10px 24px;
+      background: #222;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .print-button:hover {
+      background: #000;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .print-button svg {
+      margin-right: 8px;
+    }
+    
+    .item-details {
+      font-size: 12px;
+      color: #777;
+      margin-top: 5px;
+    }
+    
+    .product-name {
+      font-weight: 600;
+    }
+    
+    .logo-placeholder {
+      width: 60px;
+      height: 60px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.2);
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 24px;
+      border: 2px solid rgba(255,255,255,0.5);
+    }
+    
+    .customer-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+    
+    .info-block {
+      background-color: #f9f9f9;
+      border-radius: 4px;
+      padding: 20px;
+      border: 1px solid #eee;
+      position: relative;
+    }
+    
+    .info-block::before {
+      content: '';
+      position: absolute;
+      top: -1px;
+      left: -1px;
+      right: -1px;
+      height: 6px;
+      background-color: #222;
+    }
+    
+    .info-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #777;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    
+    .info-value {
+      font-weight: 600;
+      color: #222;
+    }
+
+    .invoice-watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      font-size: 120px;
+      color: rgba(0,0,0,0.03);
+      font-weight: 900;
+      pointer-events: none;
+      text-transform: uppercase;
+      white-space: nowrap;
+      z-index: 0;
+    }
+    
+    .pharmacy-details {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px dashed #ddd;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .signature-block {
+      width: 200px;
+      margin-top: 20px;
+    }
+    
+    .signature-line {
+      height: 1px;
+      background: #222;
+      margin-bottom: 5px;
+    }
+    
+    .signature-label {
+      font-size: 12px;
+      color: #555;
+      text-align: center;
+    }
+    
+    .receipt-barcode {
+      text-align: center;
+      margin-top: 30px;
+      font-size: 10px;
+      color: #777;
+    }
+    
+    .barcode-placeholder {
+      height: 40px;
+      background: repeating-linear-gradient(to right, #000, #000 1px, #fff 1px, #fff 3px);
+      margin: 5px 0;
+      position: relative;
+    }
+    
+    .barcode-placeholder::after {
+      content: '${saleData.invoiceNumber || "N/A"}';
+      position: absolute;
+      bottom: -18px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 12px;
+      color: #222;
+      font-weight: 500;
+    }
+    
+    @media print {
+      @page {
+        margin: 10mm;
+        size: A4;
+      }
+      
+      body {
+        padding: 0;
+        background: none;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      
+      .container {
+        box-shadow: none;
+        border: none;
+        border-radius: 0;
+      }
+      
+      .no-print {
+        display: none;
+      }
+      
+      .invoice-header, .total-row td {
+        background-color: #222 !important;
+        color: white !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      
+      tr:nth-child(odd) {
+        background-color: #f9f9f9 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button class="print-button" onclick="window.print();">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+        <rect x="6" y="14" width="12" height="8"></rect>
+      </svg>
+      Print Invoice
+    </button>
+  </div>
+  
+  <div class="container">
+    <div class="invoice-watermark">RECEIPT</div>
+    <div class="invoice-header">
+      <div>
+        <div class="logo-placeholder">${
+          saleData.store?.name?.charAt(0) || "P"
+        }</div>
+        <div class="store-name">${saleData.store?.name || "Pharmacy"}</div>
+        <div class="store-info">
+          ${saleData.store?.email ? `${saleData.store.email}<br>` : ""}
+          ${saleData.store?.phoneNumber ? `${saleData.store.phoneNumber}` : ""}
+        </div>
+      </div>
+      <div class="invoice-info">
+        <div class="invoice-status status-${paymentStatus.toLowerCase()}">
+          ${paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}
+        </div>
+        <div class="invoice-title">Invoice #${
+          saleData.invoiceNumber || "N/A"
+        }</div>
+        <div class="invoice-details">
+          Date: ${dayjs(saleData.createdAt).format("MMMM DD, YYYY")}<br>
+          Time: ${dayjs(saleData.createdAt).format("HH:mm")}
+        </div>
+      </div>
+    </div>
+    
+    <div class="invoice-body">
+      <div class="customer-info-grid">
+        <div class="info-block">
+          <div class="info-label">Customer</div>
+          <div class="info-value">${
+            saleData.customer?.name || "Walk-in Customer"
+          }</div>
+          ${
+            saleData.customer?.email
+              ? `<div class="item-details">${saleData.customer.email}</div>`
+              : ""
+          }
+          ${
+            saleData.customer?.phoneNumber
+              ? `<div class="item-details">${saleData.customer.phoneNumber}</div>`
+              : ""
+          }
+        </div>
+        <div class="info-block">
+          <div class="info-label">Payment Details</div>
+          <div class="info-value">${
+            paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
+          }</div>
+          <div class="item-details">Transaction ID: ${
+            saleData.payment?.transactionId || "N/A"
+          }</div>
+        </div>
+      </div>
+      
+      <div class="section-title">Order Items</div>
+      <table>
+        <thead>
+          <tr>
+            <th width="30%">Product</th>
+            <th width="20%">Batch</th>
+            <th width="10%">Quantity</th>
+            <th class="text-right" width="15%">Unit Price</th>
+            <th class="text-right" width="10%">Discount</th>
+            <th class="text-right" width="15%">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            saleData.items && Array.isArray(saleData.items)
+              ? saleData.items
+                  .map(
+                    (item) => `
+          <tr>
+            <td>
+              <div class="product-name">${item?.product?.name || "N/A"}</div>
+              ${
+                item?.product?.genericName
+                  ? `<div class="item-details">Generic: ${item.product.genericName}</div>`
+                  : ""
               }
-              
-              .container {
-                max-width: 800px;
-                margin: 0 auto;
-                border: 1px solid #e0e0e0;
-                padding: 40px;
-                box-shadow: 0 0 20px rgba(0,0,0,0.05);
+              ${
+                item?.product?.description
+                  ? `<div class="item-details">${item.product.description}</div>`
+                  : ""
               }
-              
-              .invoice-header {
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 40px;
-                padding-bottom: 20px;
-                border-bottom: 2px solid #e0e0e0;
+            </td>
+            <td>
+              ${item?.batch?.batchNumber || "N/A"}
+              ${
+                item?.batch?.expiryDate
+                  ? `<div class="item-details">Exp: ${dayjs(
+                      item.batch.expiryDate
+                    ).format("MMM DD, YYYY")}</div>`
+                  : ""
               }
-              
-              .store-name {
-                font-family: 'Merriweather', serif;
-                font-size: 28px;
-                font-weight: 700;
-                color: #2c3e50;
-                letter-spacing: 0.5px;
-              }
-              
-              .store-info {
-                color: #555;
-                font-size: 14px;
-                margin-top: 8px;
-              }
-              
-              .invoice-info {
-                text-align: right;
-              }
-              
-              .invoice-title {
-                font-family: 'Merriweather', serif;
-                font-size: 20px;
-                font-weight: 700;
-                margin-bottom: 8px;
-                color: #2c3e50;
-              }
-              
-              .invoice-details {
-                font-size: 14px;
-                color: #555;
-              }
-              
-              .invoice-status {
-                display: inline-block;
-                padding: 6px 12px;
-                margin-bottom: 15px;
-                border-radius: 3px;
-                font-weight: 600;
-                font-size: 12px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-              }
-              
-              .status-paid {
-                background-color: #f0f9f0;
-                color: #27ae60;
-                border: 1px solid #a3e2b8;
-              }
-              
-              .status-pending {
-                background-color: #fffbeb;
-                color: #f39c12;
-                border: 1px solid #fde6a6;
-              }
-              
-              .status-failed {
-                background-color: #feeeee;
-                color: #e74c3c;
-                border: 1px solid #f5b4ae;
-              }
-              
-              .status-unknown {
-                background-color: #f5f5f5;
-                color: #7f8c8d;
-                border: 1px solid #e0e0e0;
-              }
-              
-              .section-title {
-                font-family: 'Merriweather', serif;
-                font-size: 18px;
-                font-weight: 700;
-                color: #2c3e50;
-                margin: 30px 0 15px;
-                padding-bottom: 8px;
-                border-bottom: 1px solid #eee;
-              }
-              
-              table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 30px;
-                font-size: 14px;
-              }
-              
-              th {
-                background-color: #f9f9f9;
-                font-weight: 600;
-                text-align: left;
-                padding: 12px 15px;
-                border-bottom: 2px solid #e0e0e0;
-                color: #2c3e50;
-              }
-              
-              td {
-                padding: 12px 15px;
-                border-bottom: 1px solid #f0f0f0;
-                vertical-align: top;
-              }
-              
-              .text-right {
-                text-align: right;
-              }
-              
-              .summary-table {
-                width: 40%;
-                margin-left: auto;
-                margin-right: 0;
-                font-size: 14px;
-              }
-              
-              .summary-table td {
-                padding: 8px 15px;
-                border: none;
-              }
-              
-              .summary-table .label {
-                text-align: right;
-                color: #555;
-              }
-              
-              .summary-table .value {
-                font-weight: 600;
-                text-align: right;
-              }
-              
-              .total-row td {
-                padding-top: 15px;
-                font-weight: 700;
-                font-size: 16px;
-                color: #2c3e50;
-                border-top: 2px solid #e0e0e0;
-              }
-              
-              .footer {
-                margin-top: 60px;
-                padding-top: 20px;
-                border-top: 1px solid #eee;
-                text-align: center;
-                font-size: 13px;
-                color: #777;
-              }
-              
-              .no-print {
-                text-align: right;
-                margin-bottom: 20px;
-              }
-              
-              .print-button {
-                padding: 10px 20px;
-                background: #2c3e50;
-                color: white;
-                border: none;
-                border-radius: 3px;
-                cursor: pointer;
-                font-size: 14px;
-                font-weight: 600;
-                transition: background 0.3s;
-              }
-              
-              .print-button:hover {
-                background: #34495e;
-              }
-              
-              .item-details {
-                font-size: 13px;
-                color: #777;
-                margin-top: 3px;
-              }
-              
-              .customer-table {
-                font-size: 14px;
-              }
-              
-              .customer-table th {
-                width: 150px;
-                vertical-align: top;
-              }
-              
-              @media print {
-                @page {
-                  margin: 15mm;
-                }
-                
-                body {
-                  padding: 0;
-                  background: none;
-                }
-                
-                .container {
-                  box-shadow: none;
-                  border: none;
-                  padding: 0;
-                }
-                
-                .no-print {
-                  display: none;
-                }
-              }
-            </style>
-          </head>
-          <body>
-            <div class="no-print">
-              <button class="print-button" onclick="window.print();">
-                Print Invoice
-              </button>
-            </div>
-            
-            <div class="container">
-              <div class="invoice-header">
-                <div>
-                  <div class="store-name">${
-                    saleData.store?.name || "Store"
-                  }</div>
-                  <div class="store-info">
-                    ${
-                      saleData.store?.email
-                        ? `Email: ${saleData.store.email}<br>`
-                        : ""
-                    }
-                    ${
-                      saleData.store?.phoneNumber
-                        ? `Phone: ${saleData.store.phoneNumber}`
-                        : ""
-                    }
-                  </div>
-                </div>
-                <div class="invoice-info">
-                  <div class="invoice-status status-${paymentStatus.toLowerCase()}">
-                    ${
-                      paymentStatus.charAt(0).toUpperCase() +
-                      paymentStatus.slice(1)
-                    }
-                  </div>
-                  <div class="invoice-title">Invoice #${
-                    saleData.invoiceNumber || "N/A"
-                  }</div>
-                  <div class="invoice-details">
-                    Date: ${dayjs(saleData.createdAt).format(
-                      "MMMM DD, YYYY"
-                    )}<br>
-                    Time: ${dayjs(saleData.createdAt).format("HH:mm")}
-                  </div>
-                </div>
-              </div>
-              
-              <div class="section-title">Customer Information</div>
-              <table class="customer-table">
-                <tbody>
-                  <tr>
-                    <th>Customer Name:</th>
-                    <td>${saleData.customer?.name || "N/A"}</td>
-                  </tr>
-                  ${
-                    saleData.customer?.email
-                      ? `
-                  <tr>
-                    <th>Email:</th>
-                    <td>${saleData.customer.email}</td>
-                  </tr>`
-                      : ""
-                  }
-                  ${
-                    saleData.customer?.phoneNumber
-                      ? `
-                  <tr>
-                    <th>Phone:</th>
-                    <td>${saleData.customer.phoneNumber}</td>
-                  </tr>`
-                      : ""
-                  }
-                  <tr>
-                    <th>Payment Method:</th>
-                    <td>${paymentMethod}</td>
-                  </tr>
-                </tbody>
-              </table>
-              
-              <div class="section-title">Order Items</div>
-              <table>
-                <thead>
-                  <tr>
-                    <th width="30%">Product</th>
-                    <th width="20%">Batch</th>
-                    <th width="10%">Quantity</th>
-                    <th class="text-right" width="15%">Unit Price</th>
-                    <th class="text-right" width="10%">Discount</th>
-                    <th class="text-right" width="15%">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${
-                    saleData.items && Array.isArray(saleData.items)
-                      ? saleData.items
-                          .map(
-                            (item) => `
-                    <tr>
-                      <td>
-                        ${item?.product?.name || "N/A"}
-                        ${
-                          item?.product?.genericName
-                            ? `
-                        <div class="item-details">Generic: ${item.product.genericName}</div>`
-                            : ""
-                        }
-                        ${
-                          item?.product?.description
-                            ? `
-                        <div class="item-details">${item.product.description}</div>`
-                            : ""
-                        }
-                      </td>
-                      <td>
-                        ${item?.batch?.batchNumber || "N/A"}
-                        ${
-                          item?.batch?.expiryDate
-                            ? `
-                        <div class="item-details">Exp: ${dayjs(
-                          item.batch.expiryDate
-                        ).format("MMM DD, YYYY")}</div>`
-                            : ""
-                        }
-                      </td>
-                      <td>${item?.quantity || 0}</td>
-                      <td class="text-right">$${(item.unitPrice || 0).toFixed(
-                        2
-                      )}</td>
-                      <td class="text-right">$${(item.discount || 0).toFixed(
-                        2
-                      )}</td>
-                      <td class="text-right">$${(
-                        (item.quantity || 0) * (item.unitPrice || 0) -
-                        (item.discount || 0)
-                      ).toFixed(2)}</td>
-                    </tr>`
-                          )
-                          .join("")
-                      : '<tr><td colspan="6" style="text-align: center;">No items found</td></tr>'
-                  }
-                </tbody>
-              </table>
-              
-              <table class="summary-table">
-                <tbody>
-                  <tr>
-                    <td class="label">Subtotal:</td>
-                    <td class="value">$${(saleData.subtotal || 0).toFixed(
-                      2
-                    )}</td>
-                  </tr>
-                  <tr>
-                    <td class="label">Discount:</td>
-                    <td class="value">$${(saleData.discount || 0).toFixed(
-                      2
-                    )}</td>
-                  </tr>
-                  <tr>
-                    <td class="label">Tax:</td>
-                    <td class="value">$${(saleData.tax || 0).toFixed(2)}</td>
-                  </tr>
-                  <tr class="total-row">
-                    <td class="label">Total:</td>
-                    <td class="value">$${(saleData.total || 0).toFixed(2)}</td>
-                  </tr>
-                </tbody>
-              </table>
-              
-              <div class="footer">
-                <p>Served by: ${saleData.staffMember?.firstName || ""} ${
-          saleData.staffMember?.lastName || ""
-        }</p>
-                <p>Generated on ${dayjs().format(
-                  "MMMM DD, YYYY"
-                )} at ${dayjs().format("HH:mm")}</p>
-                <p>Thank you for choosing ${
-                  saleData.store?.name || "us"
-                }. We appreciate your business!</p>
-              </div>
-            </div>
-          </body>
-          </html>
-        `;
+            </td>
+            <td>${item?.quantity || 0}</td>
+            <td class="text-right">Rs. ${(item.unitPrice || 0).toFixed(2)}</td>
+            <td class="text-right">Rs. ${(item.discount || 0).toFixed(2)}</td>
+            <td class="text-right">Rs. ${(
+              (item.quantity || 0) * (item.unitPrice || 0) -
+              (item.discount || 0)
+            ).toFixed(2)}</td>
+          </tr>`
+                  )
+                  .join("")
+              : '<tr><td colspan="6" style="text-align: center;">No items found</td></tr>'
+          }
+        </tbody>
+      </table>
+      
+      <div class="summary-container">
+        <table class="summary-table">
+          <tbody>
+            <tr>
+              <td class="label">Subtotal:</td>
+              <td class="value">Rs. ${(saleData.subtotal || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td class="label">Discount:</td>
+              <td class="value">Rs. ${(saleData.discount || 0).toFixed(2)}</td>
+            </tr>
+            <tr>
+              <td class="label">Tax:</td>
+              <td class="value">Rs. ${(saleData.tax || 0).toFixed(2)}</td>
+            </tr>
+            <tr class="total-row">
+              <td class="label">Total:</td>
+              <td class="value">Rs. ${(saleData.total || 0).toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="pharmacy-details">
+        <div class="signature-block">
+          <div class="signature-line"></div>
+          <div class="signature-label">Pharmacist Signature</div>
+        </div>
+        <div class="signature-block">
+          <div class="signature-line"></div>
+          <div class="signature-label">Customer Signature</div>
+        </div>
+      </div>
+      
+      <div class="receipt-barcode">
+        <p>Invoice Verification</p>
+        <div class="barcode-placeholder"></div>
+      </div>
+      
+      <div class="footer">
+        <p><strong>Served by:</strong> ${
+          saleData.staffMember?.firstName || ""
+        } ${saleData.staffMember?.lastName || ""}</p>
+        <p>Generated on ${dayjs().format("MMMM DD, YYYY")} at ${dayjs().format(
+          "HH:mm"
+        )}</p>
+        <p>Thank you for choosing ${
+          saleData.store?.name || "our pharmacy"
+        }. We appreciate your business!</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+`;
 
         // Write to the new window and trigger print
         printWindow.document.write(printContent);
@@ -741,7 +936,7 @@ const SalesPage = () => {
       title: "Total Amount",
       dataIndex: "total",
       key: "total",
-      render: (total) => `$${total.toFixed(2)}`,
+      render: (total) => `Rs. ${total.toFixed(2)}`,
       sorter: (a, b) => a.total - b.total,
     },
     {
@@ -1110,7 +1305,9 @@ const SalesPage = () => {
                     key: "unitPrice",
                     align: "right",
                     render: (price) => (
-                      <span className="font-medium">${price.toFixed(2)}</span>
+                      <span className="font-medium">
+                        Rs. {price.toFixed(2)}
+                      </span>
                     ),
                   },
                   {
@@ -1120,7 +1317,7 @@ const SalesPage = () => {
                     align: "right",
                     render: (discount) => (
                       <span className="text-success font-medium">
-                        ${discount.toFixed(2)}
+                        Rs. {discount.toFixed(2)}
                       </span>
                     ),
                   },
@@ -1131,7 +1328,7 @@ const SalesPage = () => {
                     align: "right",
                     render: (subtotal, record) => (
                       <span className="font-semibold">
-                        $
+                        Rs.
                         {(
                           record.quantity * record.unitPrice -
                           record.discount
@@ -1151,7 +1348,7 @@ const SalesPage = () => {
                         <span className="text-gray-600">Subtotal:</span>
                       </Table.Summary.Cell>
                       <Table.Summary.Cell index={1} align="right">
-                        ${currentSale.subtotal.toFixed(2)}
+                        Rs. {currentSale.subtotal.toFixed(2)}
                       </Table.Summary.Cell>
                     </Table.Summary.Row>
                     <Table.Summary.Row>
@@ -1164,7 +1361,7 @@ const SalesPage = () => {
                       </Table.Summary.Cell>
                       <Table.Summary.Cell index={1} align="right">
                         <span className="text-success">
-                          ${currentSale.discount.toFixed(2)}
+                          Rs. {currentSale.discount.toFixed(2)}
                         </span>
                       </Table.Summary.Cell>
                     </Table.Summary.Row>
@@ -1177,7 +1374,7 @@ const SalesPage = () => {
                         <span className="text-gray-600">Tax:</span>
                       </Table.Summary.Cell>
                       <Table.Summary.Cell index={1} align="right">
-                        ${currentSale.tax.toFixed(2)}
+                        Rs. {currentSale.tax.toFixed(2)}
                       </Table.Summary.Cell>
                     </Table.Summary.Row>
                     <Table.Summary.Row className="bg-gray-50">
@@ -1190,7 +1387,7 @@ const SalesPage = () => {
                       </Table.Summary.Cell>
                       <Table.Summary.Cell index={1} align="right">
                         <span className="text-lg font-bold text-primary">
-                          ${currentSale.total.toFixed(2)}
+                          Rs. {currentSale.total.toFixed(2)}
                         </span>
                       </Table.Summary.Cell>
                     </Table.Summary.Row>

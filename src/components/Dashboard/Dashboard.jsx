@@ -13,48 +13,34 @@ import {
   Progress,
   Badge,
   Tag,
-  Divider,
   Space,
 } from "antd";
 import {
   ShopOutlined,
   DollarOutlined,
   ShoppingOutlined,
-  UserOutlined,
+  LineChartOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
   WarningOutlined,
   CalendarOutlined,
-  LineChartOutlined,
 } from "@ant-design/icons";
 
 import { Link } from "react-router-dom";
 import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Area,
-  AreaChart,
 } from "recharts";
-import {
-  useAuthStore,
-  useInventoryStore,
-  useStoreStore,
-} from "../../Store/stores";
+import { useAuthStore, useStoreStore } from "../../Store/stores";
 import useSaleStore from "../../Store/useSaleStore";
 import { useProductStore } from "../../Store/productStore";
-// import { useAuthStore } from "../../Store/stores";
-// import useSaleStore from "../../Store/useSaleStore";
-// import useStoreStore from "../../Store/useStoreStore"; // Fixed import
-// import useInventoryStore from "../../Store/useInventoryStore"; // Fixed import
-// import useProductStore from "../../Store/useProductStore"; // Fixed import
+import RestockMedicineModal from "./RestockMed";
 
 const { Title, Text } = Typography;
 
@@ -62,11 +48,10 @@ const Dashboard = () => {
   const { user } = useAuthStore();
   const { stores, fetchStores, isLoading: storesLoading } = useStoreStore();
   const { sales, fetchSales, isLoading: salesLoading } = useSaleStore();
-  const {
-    batches,
-    fetchBatches,
-    isLoading: inventoryLoading,
-  } = useInventoryStore();
+  const [restockModalVisible, setRestockModalVisible] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [restockLoading, setRestockLoading] = useState(false);
+
   const {
     products,
     fetchProducts,
@@ -79,7 +64,7 @@ const Dashboard = () => {
   const [stats, setStats] = useState({
     totalSales: 0,
     totalRevenue: 0,
-    totalStores: 0,
+    totalStores: 1, // Default to 1 since there's only one store
     totalProducts: 0,
     salesComparison: 0,
   });
@@ -90,23 +75,8 @@ const Dashboard = () => {
       try {
         setLoadingError(null);
         await fetchStores();
-
-        // Only fetch other data if we have at least one store
-        if (stores && stores.length > 0) {
-          // Get sales for the past 30 days
-          const endDate = new Date();
-          const startDate = new Date();
-          startDate.setDate(startDate.getDate() - 30);
-
-          // Use Promise.all for parallel fetching
-          await Promise.all([
-            fetchSales({ startDate, endDate }),
-            fetchProducts(),
-            fetchBatches(),
-          ]);
-        }
       } catch (error) {
-        console.error("Failed to load dashboard data:", error);
+        console.error("Failed to load stores:", error);
         setLoadingError(
           "Failed to load dashboard data. Please try again later."
         );
@@ -114,122 +84,152 @@ const Dashboard = () => {
     };
 
     loadDashboardData();
-  }, [fetchStores, fetchSales, fetchProducts, fetchBatches, stores?.length]);
+  }, [fetchStores]);
+
+  // Load other data only after stores are loaded
+  useEffect(() => {
+    const loadAdditionalData = async () => {
+      if (!stores || stores.length === 0) return;
+
+      try {
+        // Get sales for the past 30 days
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
+
+        // Use Promise.all for parallel fetching
+        await Promise.all([
+          fetchSales({ startDate, endDate }),
+          fetchProducts(),
+        ]);
+      } catch (error) {
+        console.error("Failed to load additional dashboard data:", error);
+        setLoadingError(
+          "Failed to load dashboard data. Please try again later."
+        );
+      }
+    };
+
+    loadAdditionalData();
+  }, [fetchSales, fetchProducts, stores]);
 
   // Process data for dashboard after data is loaded
   useEffect(() => {
-    if (!sales || !products || !batches) return;
+    if (salesLoading || productsLoading) return;
+    if (!sales || !products) return;
 
     try {
-      if (sales.length > 0) {
-        // Calculate total revenue from all sales
-        const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
+      // Calculate total revenue from all sales
+      const totalRevenue = sales.reduce((sum, sale) => sum + sale.total, 0);
 
-        // Create daily sales data for chart
-        const dailySales = {};
-        sales.forEach((sale) => {
-          const date = new Date(sale.createdAt).toLocaleDateString();
-          if (!dailySales[date]) {
-            dailySales[date] = { date, amount: 0, count: 0 };
-          }
-          dailySales[date].amount += sale.total;
-          dailySales[date].count += 1;
-        });
+      // Create daily sales data for chart
+      const dailySales = {};
+      sales.forEach((sale) => {
+        const date = new Date(sale.createdAt).toLocaleDateString();
+        if (!dailySales[date]) {
+          dailySales[date] = { date, amount: 0, count: 0 };
+        }
+        dailySales[date].amount += sale.total;
+        dailySales[date].count += 1;
+      });
 
-        // Convert to array and sort by date
-        const salesDataArray = Object.values(dailySales).sort(
-          (a, b) => new Date(a.date) - new Date(b.date)
+      // Convert to array and sort by date
+      const salesDataArray = Object.values(dailySales).sort(
+        (a, b) => new Date(a.date) - new Date(b.date)
+      );
+
+      // Get only the last 7 days (or pad with zeros if less than 7 days of data)
+      const last7Days = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toLocaleDateString();
+        const existingData = salesDataArray.find(
+          (item) => item.date === dateStr
         );
-
-        // Get only the last 7 days
-        const last7DaysSales = salesDataArray.slice(-7);
-
-        // Calculate sales comparison (today vs yesterday)
-        let salesComparison = 0;
-        if (salesDataArray.length >= 2) {
-          const today = salesDataArray[salesDataArray.length - 1].amount || 0;
-          const yesterday =
-            salesDataArray[salesDataArray.length - 2].amount || 0;
-          if (yesterday > 0) {
-            salesComparison = ((today - yesterday) / yesterday) * 100;
-          }
+        if (existingData) {
+          last7Days.push(existingData);
+        } else {
+          last7Days.push({ date: dateStr, amount: 0, count: 0 });
         }
-
-        setSalesData(last7DaysSales);
-
-        // Calculate top selling products
-        const productSales = {};
-        sales.forEach((sale) => {
-          if (sale.items && Array.isArray(sale.items)) {
-            sale.items.forEach((item) => {
-              if (!productSales[item.product]) {
-                productSales[item.product] = {
-                  id: item.product,
-                  quantity: 0,
-                  revenue: 0,
-                  name: "Unknown Product",
-                };
-              }
-              productSales[item.product].quantity += item.quantity;
-              productSales[item.product].revenue += item.price * item.quantity;
-            });
-          }
-        });
-
-        // Add product names
-        for (const productId in productSales) {
-          const product = products.find((p) => p._id === productId);
-          if (product) {
-            productSales[productId].name = product.name;
-          }
-        }
-
-        const topProducts = Object.values(productSales)
-          .sort((a, b) => b.quantity - a.quantity)
-          .slice(0, 5);
-
-        setTopSellingProducts(topProducts);
-
-        // Find low stock items
-        if (batches && batches.length > 0) {
-          const lowStock = batches
-            .filter(
-              (batch) =>
-                batch.currentStock <= batch.lowStockThreshold &&
-                batch.currentStock > 0
-            )
-            .map((batch) => {
-              const product = products.find((p) => p._id === batch.product);
-              return {
-                key: batch._id,
-                productName: product ? product.name : "Unknown Product",
-                batchNumber: batch.batchNumber,
-                currentStock: batch.currentStock,
-                threshold: batch.lowStockThreshold,
-                expiryDate: new Date(batch.expiryDate).toLocaleDateString(),
-                stockPercentage: Math.round(
-                  (batch.currentStock / batch.lowStockThreshold) * 100
-                ),
-              };
-            });
-
-          setLowStockItems(lowStock);
-        }
-
-        // Update stats
-        setStats({
-          totalSales: sales.length,
-          totalRevenue,
-          totalStores: stores?.length || 0,
-          totalProducts: products?.length || 0,
-          salesComparison,
-        });
       }
+
+      // Calculate sales comparison (today vs yesterday)
+      let salesComparison = 0;
+      const today = last7Days[6].amount;
+      const yesterday = last7Days[5].amount;
+      if (yesterday > 0) {
+        salesComparison = ((today - yesterday) / yesterday) * 100;
+      }
+
+      setSalesData(last7Days);
+
+      // Calculate top selling products
+      const productSales = {};
+      sales.forEach((sale) => {
+        if (sale.items && Array.isArray(sale.items)) {
+          sale.items.forEach((item) => {
+            if (!productSales[item.product]) {
+              productSales[item.product] = {
+                id: item.product,
+                quantity: 0,
+                revenue: 0,
+                name: "Unknown Product",
+              };
+            }
+            productSales[item.product].quantity += item.quantity;
+            productSales[item.product].revenue +=
+              item.unitPrice * item.quantity;
+          });
+        }
+      });
+
+      // Add product names
+      for (const productId in productSales) {
+        const product = products.find((p) => p._id === productId);
+        if (product) {
+          productSales[productId].name = product.name;
+        }
+      }
+
+      const topProducts = Object.values(productSales)
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5);
+
+      setTopSellingProducts(topProducts);
+
+      // Find low stock items from products directly (not using batches)
+      const lowStock = products
+        .filter((product) => product.isLowStock)
+        .map((product) => ({
+          key: product._id,
+          productName: product.name,
+          productId: product._id,
+          currentStock: product.totalStock,
+          threshold: product.minStockLevel,
+          expiryDate: product.nearestExpiryDate
+            ? new Date(product.nearestExpiryDate).toLocaleDateString()
+            : "N/A",
+          stockPercentage: Math.round(
+            (product.totalStock / product.minStockLevel) * 100
+          ),
+        }));
+
+      setLowStockItems(lowStock);
+
+      // Update stats
+      setStats({
+        totalSales: sales.length,
+        totalRevenue,
+        totalStores: 1, // Always 1 store as per requirement
+        totalProducts: products?.length || 0,
+        salesComparison,
+      });
     } catch (error) {
       console.error("Error processing dashboard data:", error);
       setLoadingError("Error processing dashboard data");
     }
-  }, [sales, batches, products, stores]);
+  }, [sales, products, salesLoading, productsLoading]);
 
   const lowStockColumns = [
     {
@@ -237,12 +237,6 @@ const Dashboard = () => {
       dataIndex: "productName",
       key: "productName",
       render: (text) => <Text strong>{text}</Text>,
-    },
-    {
-      title: "Batch",
-      dataIndex: "batchNumber",
-      key: "batchNumber",
-      render: (text) => <Tag color="blue">{text}</Tag>,
     },
     {
       title: "Stock Level",
@@ -279,15 +273,21 @@ const Dashboard = () => {
       title: "Action",
       key: "action",
       render: (_, record) => (
-        <Button type="link" size="small">
+        <Button
+          type="link"
+          size="small"
+          onClick={() => {
+            setSelectedProduct(record);
+            setRestockModalVisible(true);
+          }}
+        >
           Restock
         </Button>
       ),
     },
   ];
 
-  const isLoading =
-    storesLoading || salesLoading || inventoryLoading || productsLoading;
+  const isLoading = storesLoading || salesLoading || productsLoading;
 
   // Show a welcome message if user has no stores yet
   if (!isLoading && (!stores || stores.length === 0)) {
@@ -342,6 +342,30 @@ const Dashboard = () => {
       </div>
     );
   }
+
+  const handleRestock = async (restockData) => {
+    try {
+      setRestockLoading(true);
+
+      // Call your API to update the stock
+      // Example:
+      // await updateProductStock(restockData);
+
+      console.log("Restocking with data:", restockData);
+
+      // Show success message
+      message.success(`Successfully restocked ${restockData.productName}`);
+
+      // Close modal and refresh data
+      setRestockModalVisible(false);
+      fetchProducts(); // Refresh product data
+    } catch (error) {
+      console.error("Failed to restock:", error);
+      message.error("Failed to restock product. Please try again.");
+    } finally {
+      setRestockLoading(false);
+    }
+  };
 
   return (
     <div
@@ -460,15 +484,15 @@ const Dashboard = () => {
                 <Statistic
                   title={
                     <Text strong style={{ fontSize: 16 }}>
-                      Stores
+                      Store
                     </Text>
                   }
-                  value={stats.totalStores}
+                  value={stores && stores.length > 0 ? stores[0].name : "Store"}
                   valueStyle={{ color: "#722ed1", fontSize: 24 }}
                   prefix={<ShopOutlined />}
                 />
                 <Link to="/stores" style={{ display: "block", marginTop: 10 }}>
-                  <Text type="secondary">Manage stores →</Text>
+                  <Text type="secondary">View store details →</Text>
                 </Link>
               </Card>
             </Col>
@@ -520,7 +544,7 @@ const Dashboard = () => {
                 }}
                 extra={<Button type="link">View Details</Button>}
               >
-                {salesData.length > 0 ? (
+                {salesData && salesData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <AreaChart
                       data={salesData}
@@ -532,13 +556,20 @@ const Dashboard = () => {
                       }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="date" />
+                      <XAxis
+                        dataKey="date"
+                        tickFormatter={(value) => {
+                          const date = new Date(value);
+                          return `${date.getMonth() + 1}/${date.getDate()}`;
+                        }}
+                      />
                       <YAxis />
                       <Tooltip
                         formatter={(value) => [
                           `$${value.toFixed(2)}`,
                           "Revenue",
                         ]}
+                        labelFormatter={(label) => `Date: ${label}`}
                         contentStyle={{ borderRadius: 4 }}
                       />
                       <Legend />
@@ -598,12 +629,19 @@ const Dashboard = () => {
                   boxShadow: "0 2px 8px rgba(0,0,0,0.09)",
                 }}
               >
-                {topSellingProducts.length > 0 ? (
+                {topSellingProducts && topSellingProducts.length > 0 ? (
                   <div>
                     {topSellingProducts.map((product, index) => (
                       <div
                         key={product.id}
-                        style={{ marginBottom: 12, padding: "8px 0" }}
+                        style={{
+                          marginBottom: 12,
+                          padding: "8px 0",
+                          borderBottom:
+                            index < topSellingProducts.length - 1
+                              ? "1px solid #f0f0f0"
+                              : "none",
+                        }}
                       >
                         <div
                           style={{
@@ -617,7 +655,13 @@ const Dashboard = () => {
                               count={index + 1}
                               style={{
                                 backgroundColor:
-                                  index < 3 ? "#1890ff" : "#d9d9d9",
+                                  index === 0
+                                    ? "#f5222d"
+                                    : index === 1
+                                    ? "#fa8c16"
+                                    : index === 2
+                                    ? "#52c41a"
+                                    : "#d9d9d9",
                               }}
                             />
                             <Text ellipsis style={{ maxWidth: 150 }}>
@@ -630,12 +674,20 @@ const Dashboard = () => {
                           <Progress
                             percent={Math.round(
                               (product.quantity /
-                                topSellingProducts[0].quantity) *
+                                (topSellingProducts[0]?.quantity || 1)) *
                                 100
                             )}
                             showInfo={false}
                             size="small"
-                            strokeColor="#1890ff"
+                            strokeColor={
+                              index === 0
+                                ? "#f5222d"
+                                : index === 1
+                                ? "#fa8c16"
+                                : index === 2
+                                ? "#52c41a"
+                                : "#1890ff"
+                            }
                           />
                           <Text type="secondary" style={{ fontSize: 12 }}>
                             {product.quantity} units sold
@@ -667,7 +719,7 @@ const Dashboard = () => {
             bordered={false}
             style={{ borderRadius: 8, boxShadow: "0 2px 8px rgba(0,0,0,0.09)" }}
           >
-            {lowStockItems.length > 0 ? (
+            {lowStockItems && lowStockItems.length > 0 ? (
               <>
                 {lowStockItems.length > 5 && (
                   <Alert
@@ -700,6 +752,13 @@ const Dashboard = () => {
           </Card>
         </>
       )}
+      <RestockMedicineModal
+        visible={restockModalVisible}
+        onCancel={() => setRestockModalVisible(false)}
+        onRestock={handleRestock}
+        product={selectedProduct}
+        loading={restockLoading}
+      />
     </div>
   );
 };

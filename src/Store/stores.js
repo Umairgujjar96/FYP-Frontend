@@ -156,8 +156,10 @@ export const useStoreStore = create(
           // If there's no current store but stores exist, set the first one as current
           if (!get().currentStore && data.length > 0) {
             set({ currentStore: data[0] });
+            console.log(data[0]);
           }
-
+          // const thisStore = useStoreStore.getState().currentStore;
+          // console.log(thisStore);
           return data;
         } catch (error) {
           set({ error: error.message, isLoading: false });
@@ -459,7 +461,7 @@ export const useInventoryStore = create(
           });
 
           const data = await response.json();
-
+          console.log(data);
           if (!response.ok)
             throw new Error(data.message || "Failed to fetch batches");
 

@@ -160,6 +160,127 @@ export const useProductStore = create(
           throw error;
         }
       },
+
+      // Add this new function for restocking products
+      restockProduct: async (productId, restockData) => {
+        set({ isLoading: true, error: null });
+        try {
+          const token = useAuthStore.getState().token;
+          const storeId = useAuthStore.getState().currentStore?.id;
+
+          if (!storeId) throw new Error("No store selected");
+
+          // Include store ID in the request if user is not owner
+          if (useAuthStore.getState().user?.role !== "owner") {
+            restockData.store = storeId;
+          }
+
+          const response = await fetch(
+            `${BaseUrl}/api/product/products/${productId}/restock`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify(restockData),
+            }
+          );
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.message || "Failed to restock product");
+          }
+
+          // Update the product in the local state if it exists
+          const updatedProducts = get().products.map((product) =>
+            product._id === productId
+              ? {
+                  ...product,
+                  totalStock: (product.totalStock || 0) + restockData.quantity,
+                }
+              : product
+          );
+
+          set({
+            products: updatedProducts,
+            isLoading: false,
+          });
+
+          return data;
+        } catch (error) {
+          console.error("Restock Error:", error);
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
+
+      // Another useful function for fetching a single product
+      fetchProductDetails: async (productId) => {
+        set({ isLoading: true, error: null });
+        try {
+          const token = useAuthStore.getState().token;
+          const storeId = useAuthStore.getState().currentStore?.id;
+
+          if (!storeId) throw new Error("No store selected");
+
+          const response = await fetch(`${BaseUrl}/api/product/${productId}`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.message || "Failed to fetch product details");
+          }
+
+          set({ isLoading: false });
+          return data.data;
+        } catch (error) {
+          console.error("Fetch Product Details Error:", error);
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
+
+      // Function to fetch low stock products
+      fetchLowStockProducts: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const token = useAuthStore.getState().token;
+          const storeId = useAuthStore.getState().currentStore?.id;
+
+          if (!storeId) throw new Error("No store selected");
+
+          const response = await fetch(`${BaseUrl}/api/product/low-stock`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              data.message || "Failed to fetch low stock products"
+            );
+          }
+
+          set({ isLoading: false });
+          return data.data;
+        } catch (error) {
+          console.error("Fetch Low Stock Products Error:", error);
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
     }),
     {
       name: "category-storage",

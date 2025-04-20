@@ -392,12 +392,12 @@ const SellingTotal = () => {
         <div className="space-y-4">
           <div className="flex justify-between">
             <span className="font-medium">Subtotal:</span>
-            <span>${subtotal.toFixed(2)}</span>
+            <span>Rs. {subtotal.toFixed(2)}</span>
           </div>
 
           <div className="flex justify-between">
             <span className="font-medium">Tax amount:</span>
-            <span>${tax.toFixed(2)}</span>
+            <span>Rs. {tax.toFixed(2)}</span>
           </div>
 
           <div className="flex items-center justify-between relative">
@@ -433,7 +433,7 @@ const SellingTotal = () => {
           {discount > 0 && (
             <div className="flex justify-between text-red-500">
               <span>Discount amount:</span>
-              <span>-${((subtotal * discount) / 100).toFixed(2)}</span>
+              <span>-Rs. {((subtotal * discount) / 100).toFixed(2)}</span>
             </div>
           )}
 
@@ -482,7 +482,7 @@ const SellingTotal = () => {
 
           <div className="border-t pt-4 flex justify-between font-bold text-lg">
             <span>Total:</span>
-            <span>${finalTotal.toFixed(2)}</span>
+            <span>Rs. {finalTotal.toFixed(2)}</span>
           </div>
 
           <button

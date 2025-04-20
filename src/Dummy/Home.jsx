@@ -9,7 +9,9 @@ import toast from "react-hot-toast";
 import PharmacyReturnModal from "./ProductReturnModal";
 import PharmacyPOSModal from "./Voice/OpenAi";
 import VoiceButton from "../components/Small_Components/VoiceModalButton";
-
+import ReceiptPrinter from "./RecieptPrinter";
+// import ReceiptPrinter from "./ReceiptPrinter"; // Import the new component
+// ReceiptPrinter
 const Home = () => {
   const [returnModalVisible, setReturnModalVisible] = useState(false);
 
@@ -36,10 +38,16 @@ const Home = () => {
   const [isProcessingSale, setIsProcessingSale] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
+  // New states for receipt printing
+  const [printModalVisible, setPrintModalVisible] = useState(false);
+  const [completedSaleData, setCompletedSaleData] = useState(null);
+
   // Refs for input focus management
   const searchInputRef = useRef(null);
   const quantityInputRef = useRef(null);
   const cartQuantityInputRef = useRef(null);
+  const store = JSON.parse(localStorage.getItem("store-storage"));
+  const firstStore = store?.state?.stores?.data?.[0];
 
   // Fetch products on component mount
   useEffect(() => {
@@ -139,7 +147,6 @@ const Home = () => {
             quantity
           );
         }
-        console.log("Quantity:", quantity);
         resetCartEditingState();
         setCartSelectedIndex(cartSelectedIndex);
       } else {
@@ -180,6 +187,49 @@ const Home = () => {
       // Show success toast
       toast.success(`Sale completed. Invoice #${createdSale.invoiceNumber}`);
 
+      // Prepare receipt data
+      const receiptData = {
+        ...createdSale,
+        items: cartItems.map((item) => ({
+          productName: item.product.name,
+          quantity: item.quantity,
+          price: item.product.lowestPrice || item.product.highestPrice || 0,
+          subtotal:
+            (item.product.lowestPrice || item.product.highestPrice || 0) *
+            item.quantity *
+            (1 - (item.discount || 0) / 100),
+        })),
+        subtotal: cartItems.reduce(
+          (sum, item) =>
+            sum +
+            (item.product.lowestPrice || item.product.highestPrice || 0) *
+              item.quantity,
+          0
+        ),
+        discount: cartItems.reduce(
+          (sum, item) =>
+            sum +
+            ((item.product.lowestPrice || item.product.highestPrice || 0) *
+              item.quantity *
+              (item.discount || 0)) /
+              100,
+          0
+        ),
+        total: cartItems.reduce(
+          (sum, item) =>
+            sum +
+            (item.product.lowestPrice || item.product.highestPrice || 0) *
+              item.quantity *
+              (1 - (item.discount || 0) / 100),
+          0
+        ),
+        cashierName: firstStore?.owner?.firstName || "Cashier",
+      };
+
+      // Set completed sale data and show print modal
+      setCompletedSaleData(receiptData);
+      setPrintModalVisible(true);
+
       // Clear cart after successful sale
       clearCart();
     } catch (error) {
@@ -189,7 +239,14 @@ const Home = () => {
       fetchProducts();
       setIsProcessingSale(false);
     }
-  }, [cartItems.length, prepareSaleData, createSale, clearCart, fetchProducts]);
+  }, [
+    cartItems,
+    prepareSaleData,
+    createSale,
+    clearCart,
+    fetchProducts,
+    firstStore,
+  ]);
 
   const handleSaleKeyDown = useCallback(
     (e) => {
@@ -345,6 +402,12 @@ const Home = () => {
   // Get price for display (lowestPrice or a calculated price)
   const getProductPrice = useCallback((product) => {
     return product.lowestPrice || product.highestPrice || 0;
+  }, []);
+
+  // Close receipt modal and reset data
+  const handleCloseReceiptModal = useCallback(() => {
+    setPrintModalVisible(false);
+    setCompletedSaleData(null);
   }, []);
 
   return (
@@ -537,9 +600,7 @@ const Home = () => {
                             className="text-red-600 hover:text-red-800 hover:underline"
                             onClick={(e) => {
                               e.stopPropagation();
-                              console.log("this runs");
                               removeFromCart(item.product._id);
-                              console.log("this runs as well", item.product);
                               if (cartSelectedIndex >= cartItems.length - 1) {
                                 setCartSelectedIndex(
                                   Math.max(0, cartItems.length - 2)
@@ -697,6 +758,15 @@ const Home = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Receipt Print Modal */}
+      {printModalVisible && completedSaleData && (
+        <ReceiptPrinter
+          saleData={completedSaleData}
+          storeInfo={firstStore}
+          onClose={handleCloseReceiptModal}
+        />
       )}
     </div>
   );

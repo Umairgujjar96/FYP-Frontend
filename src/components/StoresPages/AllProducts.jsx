@@ -252,7 +252,7 @@ const ProductsPage = () => {
         const highestPrice = record.highestPrice || 0;
 
         if (lowestPrice === highestPrice) {
-          return <Text>${lowestPrice.toFixed(2)}</Text>;
+          return <Text>Rs. {lowestPrice.toFixed(2)}</Text>;
         }
         return (
           <Text>

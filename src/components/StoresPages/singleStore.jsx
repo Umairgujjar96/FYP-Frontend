@@ -13,27 +13,35 @@ import {
   Empty,
   Divider,
   Space,
+  TimePicker,
+  Select,
 } from "antd";
 import {
   EditOutlined,
   ShopOutlined,
-  EnvironmentOutlined,
   PhoneOutlined,
   MailOutlined,
   ArrowRightOutlined,
+  IdcardOutlined,
+  NumberOutlined,
+  HomeOutlined,
+  EnvironmentOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons";
 import { useStoreStore, useAuthStore } from "../../Store/stores";
+import dayjs from "dayjs";
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
+const { Option } = Select;
 
 const StoresPage = () => {
   const navigate = useNavigate();
   const { user, currentStore } = useAuthStore();
   const { isLoading, error, fetchStores, updateStore } = useStoreStore();
-
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [form] = Form.useForm();
-
+  // current store looks like this
+  console.log(currentStore);
   // Fetch the store on page load
   useEffect(() => {
     fetchStores().catch((err) => {
@@ -49,13 +57,20 @@ const StoresPage = () => {
     if (currentStore && isModalVisible) {
       form.setFieldsValue({
         name: currentStore.name,
-        address: currentStore?.address,
-        city: currentStore.city,
-        state: currentStore.state,
-        zipCode: currentStore.zipCode,
-        phone: currentStore.phoneNumber,
-        email: currentStore.storeEmail,
-        type: currentStore.type || "retail",
+        phoneNumber: currentStore.phoneNumber,
+        email: currentStore.storeEmail || currentStore.email, // Handle different property names
+        licenseNumber: currentStore.licenseNumber,
+        registrationNumber: currentStore.registrationNumber,
+        "address.street": currentStore.address?.street || "",
+        "address.city": currentStore.address?.city || "",
+        "address.state": currentStore.address?.state || "",
+        "address.postalCode": currentStore.address?.postalCode || "",
+        open: currentStore.operatingHours?.open
+          ? dayjs(currentStore.operatingHours.open, "HH:mm")
+          : null,
+        close: currentStore.operatingHours?.close
+          ? dayjs(currentStore.operatingHours.close, "HH:mm")
+          : null,
       });
     }
   }, [currentStore, isModalVisible, form]);
@@ -72,8 +87,34 @@ const StoresPage = () => {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
-      console.log(currentStore);
-      await updateStore(currentStore.id, values);
+
+      // Format the data to match the API expectations
+      const formattedValues = {
+        name: values.name,
+        phoneNumber: values.phoneNumber,
+        email: values.email,
+        licenseNumber: values.licenseNumber,
+        registrationNumber: values.registrationNumber,
+        address: {
+          street: values["address.street"],
+          city: values["address.city"],
+          state: values["address.state"],
+          postalCode: values["address.postalCode"],
+        },
+      };
+
+      // Add operating hours if provided
+      if (values.open || values.close) {
+        formattedValues.operatingHours = {};
+        if (values.open) {
+          formattedValues.operatingHours.open = values.open.format("HH:mm");
+        }
+        if (values.close) {
+          formattedValues.operatingHours.close = values.close.format("HH:mm");
+        }
+      }
+
+      await updateStore(currentStore._id || currentStore.id, formattedValues);
       notification.success({
         message: "Store Updated",
         description: `${values.name} has been successfully updated.`,
@@ -102,18 +143,18 @@ const StoresPage = () => {
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64">
-        <Text type="danger" className="text-lg mb-4">
-          {error}
-        </Text>
-        <Button type="primary" onClick={fetchStores}>
-          Try Again
-        </Button>
-      </div>
-    );
-  }
+  // if (error) {
+  //   return (
+  //     <div className="flex flex-col items-center justify-center h-64">
+  //       <Text type="danger" className="text-lg mb-4">
+  //         {error}
+  //       </Text>
+  //       <Button type="primary" onClick={fetchStores}>
+  //         Try Again
+  //       </Button>
+  //     </div>
+  //   );
+  // }
 
   if (!currentStore) {
     return (
@@ -159,6 +200,11 @@ const StoresPage = () => {
           <Title level={3} className="mb-0">
             {currentStore.name}
           </Title>
+          {currentStore.isActive === false && (
+            <Text type="danger" className="ml-4">
+              (Inactive)
+            </Text>
+          )}
         </div>
         <Divider />
 
@@ -167,21 +213,22 @@ const StoresPage = () => {
           bordered
           column={{ xs: 1, sm: 2, md: 3 }}
         >
-          <Descriptions.Item label="Address" span={2}>
-            <div className="flex items-start">
-              <EnvironmentOutlined className="text-gray-500 mr-2 mt-1" />
-              <div>
-                <div>{currentStore.address}</div>
-                <div>
-                  {currentStore.city}, {currentStore.state}{" "}
-                  {currentStore.zipCode}
-                </div>
-              </div>
+          <Descriptions.Item label="License Number" span={1}>
+            <div className="flex items-center">
+              <IdcardOutlined className="text-gray-500 mr-2" />
+              <Text>{currentStore.licenseNumber || "N/A"}</Text>
             </div>
           </Descriptions.Item>
 
-          <Descriptions.Item label="Store Type">
-            <Text capitalize>{currentStore.type || "Retail"}</Text>
+          <Descriptions.Item label="Registration Number" span={1}>
+            <div className="flex items-center">
+              <NumberOutlined className="text-gray-500 mr-2" />
+              <Text>{currentStore.registrationNumber || "N/A"}</Text>
+            </div>
+          </Descriptions.Item>
+
+          <Descriptions.Item label="Staff Count" span={1}>
+            <Text>{currentStore.staff?.length || 0} members</Text>
           </Descriptions.Item>
 
           <Descriptions.Item label="Phone">
@@ -194,7 +241,53 @@ const StoresPage = () => {
           <Descriptions.Item label="Email">
             <div className="flex items-center">
               <MailOutlined className="text-gray-500 mr-2" />
-              <Text>{currentStore.storeEmail || "N/A"}</Text>
+              <Text>
+                {currentStore.email || currentStore.storeEmail || "N/A"}
+              </Text>
+            </div>
+          </Descriptions.Item>
+
+          <Descriptions.Item label="Status">
+            <Text type={currentStore.isActive !== false ? "success" : "danger"}>
+              {currentStore.isActive !== false ? "Active" : "Inactive"}
+            </Text>
+          </Descriptions.Item>
+        </Descriptions>
+
+        <Divider />
+
+        <Descriptions layout="vertical" bordered column={{ xs: 1, sm: 2 }}>
+          <Descriptions.Item label="Address" span={1}>
+            <div className="flex items-start">
+              <EnvironmentOutlined className="text-gray-500 mr-2 mt-1" />
+              <div>
+                <div>{currentStore.address?.street || "N/A"}</div>
+                <div>
+                  {currentStore.address?.city || ""}
+                  {currentStore.address?.city && currentStore.address?.state
+                    ? ", "
+                    : ""}
+                  {currentStore.address?.state || ""}
+                </div>
+                <div>{currentStore.address?.postalCode || ""}</div>
+              </div>
+            </div>
+          </Descriptions.Item>
+
+          <Descriptions.Item label="Operating Hours" span={1}>
+            <div className="flex items-center">
+              <ClockCircleOutlined className="text-gray-500 mr-2" />
+              <div>
+                {currentStore.operatingHours?.open &&
+                currentStore.operatingHours?.close ? (
+                  <div>
+                    {currentStore.operatingHours.open} -{" "}
+                    {currentStore.operatingHours.close}
+                  </div>
+                ) : (
+                  <Text type="secondary">Not specified</Text>
+                )}
+              </div>
             </div>
           </Descriptions.Item>
         </Descriptions>
@@ -270,7 +363,7 @@ const StoresPage = () => {
             Update
           </Button>,
         ]}
-        width={600}
+        width={700}
       >
         <Form form={form} layout="vertical" name="storeForm">
           <Form.Item
@@ -286,45 +379,38 @@ const StoresPage = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Form.Item
-              name="address"
-              label="Address"
-              rules={[{ required: true, message: "Please enter the address" }]}
+              name="licenseNumber"
+              label="License Number"
+              rules={[
+                { required: true, message: "Please enter license number" },
+              ]}
             >
               <Input
-                prefix={<EnvironmentOutlined className="text-gray-400" />}
-                placeholder="Street Address"
+                prefix={<IdcardOutlined className="text-gray-400" />}
+                placeholder="License Number"
               />
             </Form.Item>
 
             <Form.Item
-              name="city"
-              label="City"
-              rules={[{ required: true, message: "Please enter the city" }]}
+              name="registrationNumber"
+              label="Registration Number"
+              rules={[
+                { required: true, message: "Please enter registration number" },
+              ]}
             >
-              <Input placeholder="City" />
+              <Input
+                prefix={<NumberOutlined className="text-gray-400" />}
+                placeholder="Registration Number"
+              />
             </Form.Item>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Form.Item
-              name="state"
-              label="State/Province"
-              rules={[{ required: true, message: "Please enter the state" }]}
+              name="phoneNumber"
+              label="Phone"
+              rules={[{ required: true, message: "Please enter phone number" }]}
             >
-              <Input placeholder="State/Province" />
-            </Form.Item>
-
-            <Form.Item
-              name="zipCode"
-              label="Zip/Postal Code"
-              rules={[{ required: true, message: "Please enter the zip code" }]}
-            >
-              <Input placeholder="Zip/Postal Code" />
-            </Form.Item>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Form.Item name="phone" label="Phone">
               <Input
                 prefix={<PhoneOutlined className="text-gray-400" />}
                 placeholder="Phone Number"
@@ -334,11 +420,77 @@ const StoresPage = () => {
             <Form.Item
               name="email"
               label="Email"
-              rules={[{ type: "email", message: "Please enter a valid email" }]}
+              rules={[
+                { required: true, message: "Please enter email" },
+                { type: "email", message: "Please enter a valid email" },
+              ]}
             >
               <Input
                 prefix={<MailOutlined className="text-gray-400" />}
                 placeholder="Email Address"
+              />
+            </Form.Item>
+          </div>
+
+          <Divider>Address Information</Divider>
+
+          <div className="grid grid-cols-1 gap-4">
+            <Form.Item
+              name="address.street"
+              label="Street Address"
+              rules={[
+                { required: true, message: "Please enter street address" },
+              ]}
+            >
+              <Input
+                prefix={<HomeOutlined className="text-gray-400" />}
+                placeholder="Street Address"
+              />
+            </Form.Item>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Form.Item
+              name="address.city"
+              label="City"
+              rules={[{ required: true, message: "Please enter city" }]}
+            >
+              <Input placeholder="City" />
+            </Form.Item>
+
+            <Form.Item
+              name="address.state"
+              label="State"
+              rules={[{ required: true, message: "Please enter state" }]}
+            >
+              <Input placeholder="State" />
+            </Form.Item>
+
+            <Form.Item
+              name="address.postalCode"
+              label="Postal Code"
+              rules={[{ required: true, message: "Please enter postal code" }]}
+            >
+              <Input placeholder="Postal Code" />
+            </Form.Item>
+          </div>
+
+          <Divider>Operating Hours</Divider>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Form.Item name="open" label="Opening Time">
+              <TimePicker
+                format="HH:mm"
+                placeholder="Select opening time"
+                style={{ width: "100%" }}
+              />
+            </Form.Item>
+
+            <Form.Item name="close" label="Closing Time">
+              <TimePicker
+                format="HH:mm"
+                placeholder="Select closing time"
+                style={{ width: "100%" }}
               />
             </Form.Item>
           </div>
