@@ -8,7 +8,7 @@ const SellingBox = () => {
     useCartStore();
   const { customers, getCustomersByStore } = useCustomerStore(); // Get customers from store
   const { currentStore } = useAuthStore();
-  console.log(customers);
+  // console.log(customers);
   const storeId = currentStore?.id;
 
   useEffect(() => {

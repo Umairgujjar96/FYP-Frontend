@@ -384,10 +384,17 @@ const Dashboard = () => {
               Welcome back, {user?.name || "User"}
             </Text>
           </Col>
-          <Col>
-            <Button type="primary" icon={<LineChartOutlined />}>
-              Generate Report
-            </Button>
+          <Col className="space-x-4">
+            <Link to={"/sales-report"}>
+              <Button type="primary" icon={<LineChartOutlined />}>
+                Generate Report
+              </Button>
+            </Link>
+            <Link to={"/store/profit"}>
+              <Button type="primary" icon={<LineChartOutlined />}>
+                Get Profit
+              </Button>
+            </Link>
           </Col>
         </Row>
       </div>
@@ -566,7 +573,7 @@ const Dashboard = () => {
                       <YAxis />
                       <Tooltip
                         formatter={(value) => [
-                          `$${value.toFixed(2)}`,
+                          `Rs.${value.toFixed(2)}`,
                           "Revenue",
                         ]}
                         labelFormatter={(label) => `Date: ${label}`}
@@ -668,7 +675,7 @@ const Dashboard = () => {
                               {product.name}
                             </Text>
                           </Space>
-                          <Text strong>${product.revenue.toFixed(2)}</Text>
+                          <Text strong>Rs.{product.revenue.toFixed(2)}</Text>
                         </div>
                         <div style={{ marginTop: 5 }}>
                           <Progress

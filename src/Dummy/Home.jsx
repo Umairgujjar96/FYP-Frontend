@@ -6,15 +6,14 @@ import { useProductStore } from "../Store/productStore";
 import useCartStore from "../Store/useCartStore";
 import useSaleStore from "../Store/useSaleStore";
 import toast from "react-hot-toast";
-import PharmacyReturnModal from "./ProductReturnModal";
+// import PharmacyReturnModal from "./ProductReturnModal";
 import PharmacyPOSModal from "./Voice/OpenAi";
 import VoiceButton from "../components/Small_Components/VoiceModalButton";
 import ReceiptPrinter from "./RecieptPrinter";
-// import ReceiptPrinter from "./ReceiptPrinter"; // Import the new component
-// ReceiptPrinter
+import { Button } from "antd";
+import { RollbackOutlined } from "@ant-design/icons";
+import ReturnProductsModal from "./ProductReturnModal";
 const Home = () => {
-  const [returnModalVisible, setReturnModalVisible] = useState(false);
-
   const { fetchProducts, products } = useProductStore();
   const {
     addToCart,
@@ -37,6 +36,15 @@ const Home = () => {
   const [cartQuantityInput, setCartQuantityInput] = useState("");
   const [isProcessingSale, setIsProcessingSale] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [returnmodalVisible, setReturnedModalVisible] = useState(false);
+
+  const showModal = () => {
+    setReturnedModalVisible(true);
+  };
+
+  const handleCancel = () => {
+    setReturnedModalVisible(false);
+  };
 
   // New states for receipt printing
   const [printModalVisible, setPrintModalVisible] = useState(false);
@@ -183,7 +191,7 @@ const Home = () => {
 
       // Create sale through sale store
       const createdSale = await createSale(saleData);
-
+      console.log(createdSale);
       // Show success toast
       toast.success(`Sale completed. Invoice #${createdSale.invoiceNumber}`);
 
@@ -193,11 +201,11 @@ const Home = () => {
         items: cartItems.map((item) => ({
           productName: item.product.name,
           quantity: item.quantity,
-          price: item.product.lowestPrice || item.product.highestPrice || 0,
+          unitPrice: item.product.lowestPrice || item.product.highestPrice || 0,
           subtotal:
             (item.product.lowestPrice || item.product.highestPrice || 0) *
-            item.quantity *
-            (1 - (item.discount || 0) / 100),
+            item.quantity,
+          // Don't apply item-level discounts here if using cart-level discount
         })),
         subtotal: cartItems.reduce(
           (sum, item) =>
@@ -206,23 +214,32 @@ const Home = () => {
               item.quantity,
           0
         ),
-        discount: cartItems.reduce(
-          (sum, item) =>
-            sum +
-            ((item.product.lowestPrice || item.product.highestPrice || 0) *
-              item.quantity *
-              (item.discount || 0)) /
-              100,
-          0
-        ),
-        total: cartItems.reduce(
-          (sum, item) =>
-            sum +
-            (item.product.lowestPrice || item.product.highestPrice || 0) *
-              item.quantity *
-              (1 - (item.discount || 0) / 100),
-          0
-        ),
+        // Calculate discount amount from the percentage
+        discountAmount:
+          (cartItems.reduce(
+            (sum, item) =>
+              sum +
+              (item.product.lowestPrice || item.product.highestPrice || 0) *
+                item.quantity,
+            0
+          ) *
+            createdSale.discount) /
+          100,
+
+        // Keep the percentage for display
+        discountPercentage: createdSale.discount,
+
+        // Total calculation - apply cart discount directly
+        total:
+          cartItems.reduce(
+            (sum, item) =>
+              sum +
+              (item.product.lowestPrice || item.product.highestPrice || 0) *
+                item.quantity,
+            0
+          ) *
+          (1 - createdSale.discount / 100),
+
         cashierName: firstStore?.owner?.firstName || "Cashier",
       };
 
@@ -436,17 +453,18 @@ const Home = () => {
                     F1
                   </span>
                 </button>
-                <button
-                  className="bg-red-500 text-white px-4 py-2 rounded flex items-center gap-2"
-                  onClick={() => setReturnModalVisible(true)}
+                <Button
+                  type="primary"
+                  icon={<RollbackOutlined />}
+                  onClick={showModal}
+                  className="px-4 py-2 bg-red-400 rounded-xl cursor-pointer"
                 >
-                  <span>Return</span>
-                </button>
+                  Process Return
+                </Button>
 
-                <PharmacyReturnModal
-                  visible={returnModalVisible}
-                  onClose={() => setReturnModalVisible(false)}
-                  // product={productData}
+                <ReturnProductsModal
+                  visible={returnmodalVisible}
+                  onCancel={handleCancel}
                 />
               </div>
               <div className="flex gap-2">

@@ -485,14 +485,14 @@ const SellingTotal = () => {
             <span>Rs. {finalTotal.toFixed(2)}</span>
           </div>
 
-          <button
+          {/* <button
             onClick={completeSale}
             ref={completeButtonRef}
             className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-md font-medium mt-4 flex items-center justify-center"
           >
             Complete Sale
             <kbd className="ml-2 text-xs bg-green-700 px-1 rounded">Ctrl+P</kbd>
-          </button>
+          </button> */}
 
           <div className="flex justify-between mt-4">
             <div className="flex space-x-2">

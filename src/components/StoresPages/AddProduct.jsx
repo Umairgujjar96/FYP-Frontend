@@ -34,6 +34,28 @@ const { TextArea } = Input;
 const { Option } = Select;
 const { Dragger } = Upload;
 
+// Hardcoded list of manufacturers
+const MANUFACTURERS = [
+  "Sun Pharmaceutical",
+  "Cipla",
+  "Dr. Reddy's Laboratories",
+  "Lupin Limited",
+  "Aurobindo Pharma",
+  "Cadila Healthcare",
+  "Torrent Pharmaceuticals",
+  "Glenmark Pharmaceuticals",
+  "Alkem Laboratories",
+  "Mankind Pharma",
+  "Intas Pharmaceuticals",
+  "Abbott India",
+  "GlaxoSmithKline",
+  "Pfizer",
+  "Johnson & Johnson",
+  "Novartis",
+  "Sanofi",
+  "Other",
+];
+
 const ProductPage = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -286,8 +308,23 @@ const ProductPage = () => {
 
                   <Row gutter={16}>
                     <Col xs={24} md={12}>
-                      <Form.Item name="manufacturer" label="Manufacturer">
-                        <Input placeholder="Enter manufacturer" />
+                      <Form.Item
+                        name="manufacturer"
+                        label="Manufacturer"
+                        rules={[
+                          {
+                            required: true,
+                            message: "Manufacturer is required",
+                          },
+                        ]}
+                      >
+                        <Select placeholder="Select manufacturer">
+                          {MANUFACTURERS.map((manufacturer) => (
+                            <Option key={manufacturer} value={manufacturer}>
+                              {manufacturer}
+                            </Option>
+                          ))}
+                        </Select>
                       </Form.Item>
                     </Col>
 
@@ -452,6 +489,7 @@ const ProductPage = () => {
                           placeholder="Select supplier"
                           showSearch
                           optionFilterProp="children"
+                          allowClear
                         >
                           {suppliers && suppliers.length > 0 ? (
                             suppliers.map((supplier) => (
@@ -534,11 +572,8 @@ const ProductPage = () => {
                           placeholder="Enter cost price"
                           min={0}
                           step={0.01}
-                          formatter={(value) =>
-                            `Rs. ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-                          }
-                          parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
                           className="w-full"
+                          prefix="Rs. "
                         />
                       </Form.Item>
                     </Col>
@@ -571,11 +606,8 @@ const ProductPage = () => {
                           placeholder="Enter selling price"
                           min={0}
                           step={0.01}
-                          formatter={(value) =>
-                            `Rs. ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-                          }
-                          parser={(value) => value.replace(/\$\s?|(,*)/g, "")}
                           className="w-full"
+                          prefix="Rs. "
                         />
                       </Form.Item>
                     </Col>
@@ -613,7 +645,7 @@ const ProductPage = () => {
                   className="mb-6 h-full"
                   headStyle={{ borderBottom: "1px solid #f0f0f0" }}
                 >
-                  <Form.Item
+                  {/* <Form.Item
                     name="image"
                     valuePropName="fileList"
                     getValueFromEvent={(e) => {
@@ -635,7 +667,7 @@ const ProductPage = () => {
                         image of the product.
                       </p>
                     </Dragger>
-                  </Form.Item>
+                  </Form.Item> */}
 
                   {imageUrl && (
                     <div className="mt-4">

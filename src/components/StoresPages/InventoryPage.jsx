@@ -1,323 +1,147 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect } from "react";
 import {
-  Table,
   Card,
-  Button,
-  Input,
-  Badge,
-  Tag,
-  Tabs,
+  Row,
+  Col,
   Statistic,
-  Space,
-  Dropdown,
-  Menu,
+  Table,
   Progress,
+  Badge,
+  Space,
+  Tabs,
+  Tag,
   Alert,
-  DatePicker,
-  Select,
-  Tooltip,
-  Modal,
-  Form,
+  Typography,
+  Divider,
 } from "antd";
 import {
-  SearchOutlined,
-  PlusOutlined,
-  WarningOutlined,
-  ClockCircleOutlined,
-  DownloadOutlined,
-  SettingOutlined,
-  ReloadOutlined,
-  FilterOutlined,
-  DollarOutlined,
   BarChartOutlined,
+  DollarOutlined,
   ExclamationCircleOutlined,
+  CalendarOutlined,
+  MedicineBoxOutlined,
+  ShoppingOutlined,
+  PercentageOutlined,
+  StockOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
-import dayjs from "dayjs";
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+import { useProductStore } from "../../Store/productStore";
 
-const { TabPane } = Tabs;
-const { Option } = Select;
+const { Title, Text } = Typography;
 
-const InventoryPage = () => {
-  // State for all inventory data
-  const [inventoryData, setInventoryData] = useState([]);
-  // State for filtered data based on current tab
-  const [filteredData, setFilteredData] = useState([]);
-  // State for loading indicators
-  const [loading, setLoading] = useState(true);
-  // State for search term
-  const [searchTerm, setSearchTerm] = useState("");
-  // State for active tab
-  const [activeTab, setActiveTab] = useState("all");
-  // State for settings modal
-  const [settingsVisible, setSettingsVisible] = useState(false);
-  // State for add/edit item modal
-  const [itemModalVisible, setItemModalVisible] = useState(false);
-  // State for reorder thresholds
-  const [lowStockThreshold, setLowStockThreshold] = useState(10);
-  // State for expiry warning days
-  const [expiryWarningDays, setExpiryWarningDays] = useState(30);
-  // State for current item being edited
-  const [currentItem, setCurrentItem] = useState(null);
-  // Form instance for add/edit modal
-  const [form] = Form.useForm();
+// Format date to display in a readable format
+const formatDate = (dateString) => {
+  const options = { year: "numeric", month: "short", day: "numeric" };
+  return new Date(dateString).toLocaleDateString(undefined, options);
+};
 
-  // Mock data for demonstration
+// Calculate days left until expiry
+const calculateDaysLeft = (expiryDate) => {
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const diffTime = expiry - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
+
+// Colors for charts
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
+
+const InventoryDashboard = () => {
+  const { inventory, fetchInventory } = useProductStore();
+
   useEffect(() => {
-    // Simulating API call to fetch inventory data
-    setTimeout(() => {
-      const mockData = generateMockData();
-      setInventoryData(mockData);
-      setFilteredData(mockData);
-      setLoading(false);
-    }, 1000);
-  }, []);
+    fetchInventory();
+  }, [fetchInventory]);
 
-  // Function to generate mock data
-  const generateMockData = () => {
-    const categories = [
-      "Antibiotics",
-      "Painkillers",
-      "Cardiovascular",
-      "Vitamins",
-      "Antidiabetic",
-    ];
-    const products = [
-      {
-        name: "Amoxicillin",
-        category: "Antibiotics",
-        genericName: "Amoxicillin",
-        desc: "Broad-spectrum antibiotic",
-      },
-      {
-        name: "Paracetamol",
-        category: "Painkillers",
-        genericName: "Acetaminophen",
-        desc: "Pain reliever and fever reducer",
-      },
-      {
-        name: "Lisinopril",
-        category: "Cardiovascular",
-        genericName: "Lisinopril",
-        desc: "ACE inhibitor",
-      },
-      {
-        name: "Vitamin C",
-        category: "Vitamins",
-        genericName: "Ascorbic Acid",
-        desc: "Essential vitamin",
-      },
-      {
-        name: "Metformin",
-        category: "Antidiabetic",
-        genericName: "Metformin HCl",
-        desc: "Oral diabetes medicine",
-      },
-      {
-        name: "Ibuprofen",
-        category: "Painkillers",
-        genericName: "Ibuprofen",
-        desc: "NSAID pain reliever",
-      },
-      {
-        name: "Atorvastatin",
-        category: "Cardiovascular",
-        genericName: "Atorvastatin Calcium",
-        desc: "Cholesterol-lowering medication",
-      },
-      {
-        name: "Azithromycin",
-        category: "Antibiotics",
-        genericName: "Azithromycin",
-        desc: "Macrolide antibiotic",
-      },
-    ];
+  // Early return if inventory is not loaded yet
+  if (!inventory) {
+    return <div>Loading...</div>;
+  }
 
-    return Array.from({ length: 35 }, (_, i) => {
-      const product = products[Math.floor(Math.random() * products.length)];
-      const quantity = Math.floor(Math.random() * 100);
-      const daysToExpiry = Math.floor(Math.random() * 180);
-      const expiryDate = dayjs().add(daysToExpiry, "day").format("YYYY-MM-DD");
-      const batchNumber = `B-${Math.floor(1000 + Math.random() * 9000)}`;
-      const costPrice = (Math.random() * 10 + 1).toFixed(2);
-      const sellingPrice = (
-        parseFloat(costPrice) *
-        (1 + Math.random() * 0.5)
-      ).toFixed(2);
+  const inventoryData = inventory;
 
-      return {
-        id: i + 1,
-        name: product.name,
-        genericName: product.genericName,
-        description: product.desc,
-        category: product.category,
-        batchNumber,
-        quantity,
-        expiryDate,
-        daysToExpiry,
-        costPrice,
-        sellingPrice,
-        reorderLevel: Math.floor(Math.random() * 15 + 5),
-        supplier: `Supplier ${Math.floor(Math.random() * 5) + 1}`,
-        lastUpdated: dayjs()
-          .subtract(Math.floor(Math.random() * 30), "day")
-          .format("YYYY-MM-DD"),
-      };
-    });
-  };
+  // Prepare data for Recharts
+  const stockTurnoverData = inventoryData.stockTurnover.map((item) => ({
+    name: item.productName,
+    turnover: parseFloat((item.avgTurnoverRate * 100).toFixed(2)),
+    dailyRate: parseFloat((item.avgDailyTurnoverRate * 100).toFixed(2)),
+  }));
 
-  // Handle tab change and filter data accordingly
-  useEffect(() => {
-    if (inventoryData.length === 0) return;
+  const categoryData = inventoryData.categoryBreakdown.map((item) => ({
+    name: item.categoryName,
+    value: item.totalStock,
+    count: item.productCount,
+    totalValue: item.totalValue,
+  }));
 
-    const today = dayjs();
-    let filtered = [...inventoryData];
+  // Create data for supplier pie chart
+  const supplierData = inventoryData.supplierPerformance.map((supplier) => ({
+    name: supplier.supplierName,
+    value: supplier.totalStockProvided,
+    totalValue: supplier.totalStockValue,
+  }));
 
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (item) =>
-          item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.batchNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          item.category.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    switch (activeTab) {
-      case "low-stock":
-        filtered = filtered.filter(
-          (item) => item.quantity <= lowStockThreshold
-        );
-        break;
-      case "expiring-soon":
-        filtered = filtered.filter(
-          (item) => item.daysToExpiry <= expiryWarningDays
-        );
-        break;
-      case "expired":
-        filtered = filtered.filter((item) => item.daysToExpiry <= 0);
-        break;
-      default:
-        // All items - no additional filtering needed
-        break;
-    }
-
-    setFilteredData(filtered);
-  }, [
-    inventoryData,
-    activeTab,
-    searchTerm,
-    lowStockThreshold,
-    expiryWarningDays,
-  ]);
-
-  // Handle search input change
-  const handleSearch = (e) => {
-    setSearchTerm(e.target.value);
-  };
-
-  // Get status tag for inventory item
-  const getStatusTag = (item) => {
-    if (item.daysToExpiry <= 0) {
-      return <Tag color="error">Expired</Tag>;
-    }
-    if (item.daysToExpiry <= expiryWarningDays) {
-      return <Tag color="warning">Expiring Soon</Tag>;
-    }
-    if (item.quantity <= item.reorderLevel) {
-      return <Tag color="volcano">Low Stock</Tag>;
-    }
-    if (item.quantity <= item.reorderLevel * 2) {
-      return <Tag color="gold">Reorder Soon</Tag>;
-    }
-    return <Tag color="success">In Stock</Tag>;
-  };
-
-  // Get quantity badge color
-  const getQuantityBadgeStatus = (item) => {
-    if (item.quantity <= item.reorderLevel) {
-      return "error";
-    }
-    if (item.quantity <= item.reorderLevel * 2) {
-      return "warning";
-    }
-    return "success";
-  };
-
-  // Handle opening add/edit modal
-  const handleOpenItemModal = (item = null) => {
-    setCurrentItem(item);
-    if (item) {
-      form.setFieldsValue({
-        ...item,
-        expiryDate: dayjs(item.expiryDate),
-      });
-    } else {
-      form.resetFields();
-    }
-    setItemModalVisible(true);
-  };
-
-  // Handle form submission
-  const handleFormSubmit = (values) => {
-    console.log("Form values:", values);
-    // Here you would typically update your backend
-
-    // For demo purposes, update local state
-    const updatedValues = {
-      ...values,
-      expiryDate: values.expiryDate.format("YYYY-MM-DD"),
-      daysToExpiry: values.expiryDate.diff(dayjs(), "day"),
-    };
-
-    if (currentItem) {
-      // Edit existing item
-      const updatedData = inventoryData.map((item) =>
-        item.id === currentItem.id ? { ...item, ...updatedValues } : item
-      );
-      setInventoryData(updatedData);
-    } else {
-      // Add new item
-      const newItem = {
-        id: inventoryData.length + 1,
-        ...updatedValues,
-        lastUpdated: dayjs().format("YYYY-MM-DD"),
-      };
-      setInventoryData([...inventoryData, newItem]);
-    }
-
-    setItemModalVisible(false);
-  };
-
-  // Handle bulk operations
-  const handleBulkAction = (action) => {
-    console.log(`Bulk action: ${action}`);
-    // Implementation would depend on your requirements
-  };
-
-  // Table columns configuration
-  const columns = [
+  // Configure columns for tables
+  const lowStockColumns = [
     {
-      title: "Name",
+      title: "Product",
       dataIndex: "name",
       key: "name",
       render: (text, record) => (
-        <div>
-          <div className="font-medium">{text}</div>
-          <div className="text-xs text-gray-500">{record.genericName}</div>
-        </div>
+        <Space direction="vertical" size={0}>
+          <Text strong>{text}</Text>
+          <Text type="secondary">
+            {record.strength}, {record.dosageForm}
+          </Text>
+        </Space>
       ),
-      sorter: (a, b) => a.name.localeCompare(b.name),
     },
     {
-      title: "Category",
-      dataIndex: "category",
-      key: "category",
-      filters: [...new Set(inventoryData.map((item) => item.category))].map(
-        (category) => ({
-          text: category,
-          value: category,
-        })
+      title: "Current Stock",
+      dataIndex: "totalStock",
+      key: "totalStock",
+      render: (text) => <Tag color="error">{text} units</Tag>,
+    },
+    {
+      title: "Min Level",
+      dataIndex: "minStockLevel",
+      key: "minStockLevel",
+    },
+    {
+      title: "Deficit",
+      dataIndex: "stockDeficit",
+      key: "stockDeficit",
+      render: (text) => <Text type="danger">-{text} units</Text>,
+    },
+  ];
+
+  const expiringColumns = [
+    {
+      title: "Product",
+      dataIndex: "productName",
+      key: "productName",
+      render: (text, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{text}</Text>
+          <Text type="secondary">
+            {record.strength}, {record.dosageForm}
+          </Text>
+        </Space>
       ),
-      onFilter: (value, record) => record.category === value,
     },
     {
       title: "Batch",
@@ -325,556 +149,429 @@ const InventoryPage = () => {
       key: "batchNumber",
     },
     {
-      title: "Quantity",
-      dataIndex: "quantity",
-      key: "quantity",
-      render: (text, record) => (
-        <Badge
-          count={text}
-          showZero
-          overflowCount={999}
-          status={getQuantityBadgeStatus(record)}
-          style={{ backgroundColor: "transparent" }}
-          className="text-right"
-        />
-      ),
-      sorter: (a, b) => a.quantity - b.quantity,
-    },
-    {
-      title: "Expiry Date",
+      title: "Expiry",
       dataIndex: "expiryDate",
       key: "expiryDate",
-      render: (text, record) => (
-        <div>
-          <div>{text}</div>
-          <div className="text-xs">
-            {record.daysToExpiry <= 0 ? (
-              <span className="text-red-500">Expired</span>
-            ) : (
-              <span
-                className={
-                  record.daysToExpiry <= expiryWarningDays
-                    ? "text-orange-500"
-                    : "text-gray-500"
-                }
-              >
-                {record.daysToExpiry} days left
-              </span>
-            )}
-          </div>
-        </div>
-      ),
-      sorter: (a, b) => new Date(a.expiryDate) - new Date(b.expiryDate),
+      render: (text) => formatDate(text),
     },
     {
-      title: "Price",
-      dataIndex: "sellingPrice",
-      key: "sellingPrice",
-      render: (text, record) => (
-        <div>
-          <div>${text}</div>
-          <div className="text-xs text-gray-500">Cost: ${record.costPrice}</div>
-        </div>
-      ),
-      sorter: (a, b) => a.sellingPrice - b.sellingPrice,
+      title: "Days Left",
+      dataIndex: "daysToExpiry",
+      key: "daysToExpiry",
+      render: (text) => <Badge status="warning" text={`${text} days`} />,
     },
     {
-      title: "Status",
-      key: "status",
-      render: (_, record) => getStatusTag(record),
-      filters: [
-        { text: "Expired", value: "expired" },
-        { text: "Expiring Soon", value: "expiring" },
-        { text: "Low Stock", value: "low" },
-        { text: "In Stock", value: "in-stock" },
-      ],
-      onFilter: (value, record) => {
-        switch (value) {
-          case "expired":
-            return record.daysToExpiry <= 0;
-          case "expiring":
-            return (
-              record.daysToExpiry > 0 &&
-              record.daysToExpiry <= expiryWarningDays
-            );
-          case "low":
-            return record.quantity <= record.reorderLevel;
-          case "in-stock":
-            return (
-              record.quantity > record.reorderLevel &&
-              record.daysToExpiry > expiryWarningDays
-            );
-          default:
-            return true;
-        }
-      },
+      title: "Stock",
+      dataIndex: "currentStock",
+      key: "currentStock",
     },
     {
-      title: "Action",
-      key: "action",
-      render: (_, record) => (
-        <Space size="small">
-          <Tooltip title="Edit">
-            <Button
-              type="text"
-              size="small"
-              onClick={() => handleOpenItemModal(record)}
-              className="text-blue-500 hover:text-blue-700"
-            >
-              Edit
-            </Button>
-          </Tooltip>
-          <Tooltip title="View Details">
-            <Button
-              type="text"
-              size="small"
-              className="text-gray-500 hover:text-gray-700"
-            >
-              Details
-            </Button>
-          </Tooltip>
-        </Space>
-      ),
+      title: "Potential Loss",
+      dataIndex: "potentialLoss",
+      key: "potentialLoss",
+      render: (text) => <Text type="danger">${text}</Text>,
     },
   ];
 
-  // Calculate inventory statistics
-  const totalItems = inventoryData.length;
-  const totalUnits = inventoryData.reduce(
-    (sum, item) => sum + item.quantity,
-    0
-  );
-  const lowStockItems = inventoryData.filter(
-    (item) => item.quantity <= lowStockThreshold
-  ).length;
-  const expiringItems = inventoryData.filter(
-    (item) => item.daysToExpiry > 0 && item.daysToExpiry <= expiryWarningDays
-  ).length;
-  const expiredItems = inventoryData.filter(
-    (item) => item.daysToExpiry <= 0
-  ).length;
-  const inventoryValue = inventoryData
-    .reduce((sum, item) => sum + item.costPrice * item.quantity, 0)
-    .toFixed(2);
-
-  // Bulk action menu
-  const bulkActionMenu = (
-    <Menu onClick={({ key }) => handleBulkAction(key)}>
-      <Menu.Item key="export">Export Data</Menu.Item>
-      <Menu.Item key="print">Print Inventory Report</Menu.Item>
-      <Menu.Item key="reorder">Generate Reorder List</Menu.Item>
-      <Menu.Item key="expire">Generate Expiry Report</Menu.Item>
-    </Menu>
-  );
+  const recentProductsColumns = [
+    {
+      title: "Product",
+      dataIndex: "name",
+      key: "name",
+    },
+    {
+      title: "Generic Name",
+      dataIndex: "genericName",
+      key: "genericName",
+    },
+    {
+      title: "Category",
+      dataIndex: "categoryName",
+      key: "categoryName",
+      render: (text) => <Tag color="blue">{text}</Tag>,
+    },
+    {
+      title: "Added On",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      render: (text) => formatDate(text),
+    },
+  ];
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      {/* Header Section */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">
-            Inventory Management
-          </h1>
-          <p className="text-gray-600">
-            View and manage your product inventory
-          </p>
-        </div>
-        <Space>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => handleOpenItemModal()}
-          >
-            Add Product
-          </Button>
-          <Dropdown overlay={bulkActionMenu} trigger={["click"]}>
-            <Button icon={<DownloadOutlined />}>Bulk Actions</Button>
-          </Dropdown>
-          <Button
-            icon={<SettingOutlined />}
-            onClick={() => setSettingsVisible(true)}
-          >
-            Settings
-          </Button>
-        </Space>
-      </div>
+    <div className="p-6 bg-gray-50">
+      <div className="mb-6">
+        <Title level={2} className="mb-4">
+          Inventory Dashboard
+        </Title>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-        <Card className="shadow-md">
-          <Statistic
-            title="Total Products"
-            value={totalItems}
-            prefix={<BarChartOutlined />}
-            valueStyle={{ color: "#1890ff" }}
-          />
-        </Card>
-        <Card className="shadow-md">
-          <Statistic
-            title="Total Units"
-            value={totalUnits}
-            prefix={<BarChartOutlined />}
-            valueStyle={{ color: "#52c41a" }}
-          />
-        </Card>
-        <Card className="shadow-md">
-          <Statistic
-            title="Low Stock"
-            value={lowStockItems}
-            prefix={<WarningOutlined />}
-            valueStyle={{ color: "#fa8c16" }}
-            suffix={`/ ${totalItems}`}
-          />
-          <Progress
-            percent={Math.round((lowStockItems / totalItems) * 100)}
-            status="active"
-            strokeColor="#fa8c16"
-            size="small"
-            className="mt-2"
-          />
-        </Card>
-        <Card className="shadow-md">
-          <Statistic
-            title="Expiring Soon"
-            value={expiringItems}
-            prefix={<ClockCircleOutlined />}
-            valueStyle={{ color: "#faad14" }}
-            suffix={`/ ${totalItems}`}
-          />
-          <Progress
-            percent={Math.round((expiringItems / totalItems) * 100)}
-            status="active"
-            strokeColor="#faad14"
-            size="small"
-            className="mt-2"
-          />
-        </Card>
-        <Card className="shadow-md">
-          <Statistic
-            title="Inventory Value"
-            value={inventoryValue}
-            prefix={<DollarOutlined />}
-            valueStyle={{ color: "#13c2c2" }}
-            precision={2}
-          />
-        </Card>
-      </div>
+        {/* Summary Statistics */}
+        <Row gutter={[16, 16]} className="mb-6">
+          <Col xs={24} sm={12} md={6}>
+            <Card bordered={false} className="h-full">
+              <Statistic
+                title="Total Products"
+                value={inventoryData.summary.totalProducts}
+                prefix={<MedicineBoxOutlined />}
+                valueStyle={{ color: "#3f8600" }}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card bordered={false} className="h-full">
+              <Statistic
+                title="Total Stock Units"
+                value={inventoryData.summary.totalStockUnits}
+                prefix={<StockOutlined />}
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card bordered={false} className="h-full">
+              <Statistic
+                title="Total Value"
+                value={inventoryData.summary.totalCostValue}
+                prefix={<DollarOutlined />}
+                precision={2}
+                valueStyle={{ color: "#1890ff" }}
+                suffix="$"
+              />
+            </Card>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <Card bordered={false} className="h-full">
+              <Statistic
+                title="Potential Profit"
+                value={inventoryData.summary.totalPotentialProfit}
+                prefix={<PercentageOutlined />}
+                precision={2}
+                valueStyle={{ color: "#3f8600" }}
+                suffix="$"
+              />
+            </Card>
+          </Col>
+        </Row>
 
-      {/* Alerts Section - Show only if there are issues */}
-      {(lowStockItems > 0 || expiringItems > 0 || expiredItems > 0) && (
-        <div className="mb-6 space-y-3">
-          {lowStockItems > 0 && (
-            <Alert
-              message={`${lowStockItems} products are running low on stock`}
-              type="warning"
-              showIcon
-              icon={<WarningOutlined />}
-              action={
-                <Button size="small" type="link">
-                  View All
-                </Button>
-              }
-            />
-          )}
-          {expiringItems > 0 && (
-            <Alert
-              message={`${expiringItems} products are expiring within ${expiryWarningDays} days`}
-              type="warning"
-              showIcon
-              icon={<ClockCircleOutlined />}
-              action={
-                <Button size="small" type="link">
-                  View All
-                </Button>
-              }
-            />
-          )}
-          {expiredItems > 0 && (
-            <Alert
-              message={`${expiredItems} products have expired and should be removed`}
-              type="error"
-              showIcon
-              icon={<ExclamationCircleOutlined />}
-              action={
-                <Button size="small" type="link">
-                  View All
-                </Button>
-              }
-            />
-          )}
-        </div>
-      )}
+        {/* Alerts Section */}
+        {inventoryData.lowStock.length > 0 ||
+        inventoryData.expiring.length > 0 ? (
+          <div className="mb-6">
+            <Title level={4}>Alerts</Title>
+            <Row gutter={[16, 16]}>
+              {inventoryData.lowStock.length > 0 && (
+                <Col xs={24} md={12}>
+                  <Alert
+                    type="warning"
+                    message={`${inventoryData.lowStock.length} products below minimum stock level`}
+                    description="Products need to be restocked soon"
+                    showIcon
+                    icon={<WarningOutlined />}
+                    className="mb-4"
+                  />
+                </Col>
+              )}
+              {inventoryData.expiring.length > 0 && (
+                <Col xs={24} md={12}>
+                  <Alert
+                    type="error"
+                    message={`${inventoryData.expiring.length} batches expiring soon`}
+                    description={`Potential loss: $${inventoryData.expiring.reduce(
+                      (sum, item) => sum + item.potentialLoss,
+                      0
+                    )}`}
+                    showIcon
+                    icon={<ExclamationCircleOutlined />}
+                    className="mb-4"
+                  />
+                </Col>
+              )}
+            </Row>
+          </div>
+        ) : null}
 
-      {/* Main Inventory Section */}
-      <Card className="shadow-md">
-        <div className="flex justify-between items-center mb-4">
-          <Input
-            placeholder="Search products..."
-            prefix={<SearchOutlined />}
-            className="max-w-md"
-            value={searchTerm}
-            onChange={handleSearch}
-            allowClear
-          />
-          <Space>
-            <Button icon={<FilterOutlined />} type="dashed">
-              Filter
-            </Button>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={() => {
-                setLoading(true);
-                setTimeout(() => {
-                  setInventoryData(generateMockData());
-                  setLoading(false);
-                }, 500);
-              }}
+        {/* Main Content Tabs */}
+        <Tabs defaultActiveKey="1" className="bg-white rounded shadow-sm p-4">
+          <Tabs.TabPane tab="Overview" key="1">
+            <Row gutter={[16, 16]}>
+              {/* Stock Movement Chart */}
+              <Col xs={24} lg={12}>
+                <Card
+                  title="Stock Turnover Rate"
+                  bordered={false}
+                  className="h-full"
+                >
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart
+                      data={stockTurnoverData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis
+                        label={{
+                          value: "Turnover Rate (%)",
+                          angle: -90,
+                          position: "insideLeft",
+                        }}
+                      />
+                      <Tooltip
+                        formatter={(value) => [`${value}%`, "Turnover Rate"]}
+                      />
+                      <Legend />
+                      <Bar
+                        dataKey="turnover"
+                        name="Turnover Rate (%)"
+                        fill="#8884d8"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Col>
+
+              {/* Category Distribution */}
+              <Col xs={24} lg={12}>
+                <Card
+                  title="Category Distribution"
+                  bordered={false}
+                  className="h-full"
+                >
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={categoryData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        nameKey="name"
+                        label={({ name, percent }) =>
+                          `${name}: ${(percent * 100).toFixed(0)}%`
+                        }
+                      >
+                        {categoryData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={COLORS[index % COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value, name, props) => [
+                          `${value} units`,
+                          props.payload.name,
+                        ]}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Col>
+            </Row>
+
+            {/* Recent Products */}
+            <Card
+              title="Recently Added Products"
+              bordered={false}
+              className="mt-6"
             >
-              Refresh
-            </Button>
-          </Space>
-        </div>
+              <Table
+                dataSource={inventoryData.recentProducts}
+                columns={recentProductsColumns}
+                rowKey="_id"
+                pagination={false}
+              />
+            </Card>
+          </Tabs.TabPane>
 
-        <Tabs activeKey={activeTab} onChange={setActiveTab} className="mb-4">
-          <TabPane tab="All Inventory" key="all" />
-          <TabPane
-            tab={
-              <Badge count={lowStockItems} offset={[10, 0]}>
-                Low Stock
-              </Badge>
-            }
-            key="low-stock"
-          />
-          <TabPane
-            tab={
-              <Badge count={expiringItems} offset={[10, 0]}>
-                Expiring Soon
-              </Badge>
-            }
-            key="expiring-soon"
-          />
-          <TabPane
-            tab={
-              <Badge count={expiredItems} offset={[10, 0]}>
-                Expired
-              </Badge>
-            }
-            key="expired"
-          />
+          <Tabs.TabPane tab="Alerts & Warnings" key="2">
+            <Row gutter={[16, 16]}>
+              {/* Low Stock Table */}
+              <Col xs={24}>
+                <Card
+                  title={
+                    <Space>
+                      <WarningOutlined style={{ color: "#faad14" }} />
+                      <span>Low Stock Products</span>
+                    </Space>
+                  }
+                  bordered={false}
+                >
+                  <Table
+                    dataSource={inventoryData.lowStock}
+                    columns={lowStockColumns}
+                    rowKey="_id"
+                    pagination={false}
+                  />
+                </Card>
+              </Col>
+
+              {/* Expiring Items */}
+              <Col xs={24}>
+                <Card
+                  title={
+                    <Space>
+                      <CalendarOutlined style={{ color: "#ff4d4f" }} />
+                      <span>Expiring Soon</span>
+                    </Space>
+                  }
+                  bordered={false}
+                >
+                  <Table
+                    dataSource={inventoryData.expiring}
+                    columns={expiringColumns}
+                    rowKey="_id"
+                    pagination={false}
+                  />
+                </Card>
+              </Col>
+            </Row>
+          </Tabs.TabPane>
+
+          <Tabs.TabPane tab="Sales & Performance" key="3">
+            <Row gutter={[16, 16]}>
+              {/* Top Selling Products */}
+              <Col xs={24} lg={12}>
+                <Card
+                  title="Top Selling Products"
+                  bordered={false}
+                  className="h-full"
+                >
+                  {inventoryData.topSellingProducts &&
+                  inventoryData.topSellingProducts.length > 0 ? (
+                    <div>
+                      {inventoryData.topSellingProducts.map(
+                        (product, index) => (
+                          <div key={product._id || index} className="mb-4">
+                            <div className="flex justify-between mb-1">
+                              <Text strong>{product.productName}</Text>
+                              <Text>{product.netQuantitySold} units sold</Text>
+                            </div>
+                            <Progress
+                              percent={Math.min(
+                                100,
+                                (product.netQuantitySold / 20) * 100
+                              )}
+                              status="active"
+                              strokeColor={COLORS[index % COLORS.length]}
+                            />
+                            <div className="text-right">
+                              <Text type="secondary">
+                                Revenue: ${product.totalRevenue}
+                              </Text>
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Text type="secondary">No sales data available</Text>
+                    </div>
+                  )}
+                </Card>
+              </Col>
+
+              {/* Supplier Performance */}
+              <Col xs={24} lg={12}>
+                <Card
+                  title="Supplier Performance"
+                  bordered={false}
+                  className="h-full"
+                >
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={supplierData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                        nameKey="name"
+                        label={({ name, percent }) =>
+                          `${name}: ${(percent * 100).toFixed(0)}%`
+                        }
+                      >
+                        {supplierData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={COLORS[index % COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value, name, props) => [
+                          `${value} units`,
+                          props.payload.name,
+                        ]}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <Divider />
+                  <Space direction="vertical" className="w-full">
+                    {inventoryData.supplierPerformance.map((supplier) => (
+                      <div
+                        key={supplier._id || supplier.supplierName}
+                        className="flex justify-between"
+                      >
+                        <Text>{supplier.supplierName}</Text>
+                        <Space>
+                          <Tag color="blue">{supplier.batchCount} batches</Tag>
+                          <Tag color="green">${supplier.totalStockValue}</Tag>
+                        </Space>
+                      </div>
+                    ))}
+                  </Space>
+                </Card>
+              </Col>
+
+              {/* Sales Summary */}
+              <Col xs={24}>
+                <Card title="Sales Summary" bordered={false}>
+                  <Row gutter={16}>
+                    <Col xs={24} sm={8}>
+                      <Statistic
+                        title="Period Sales"
+                        value={inventoryData.summary.periodSales}
+                        precision={2}
+                        valueStyle={{ color: "#3f8600" }}
+                        prefix={<DollarOutlined />}
+                        suffix="$"
+                      />
+                    </Col>
+                    <Col xs={24} sm={8}>
+                      <Statistic
+                        title="Period Returns"
+                        value={inventoryData.summary.periodReturns}
+                        precision={2}
+                        valueStyle={{ color: "#cf1322" }}
+                        prefix={<ShoppingOutlined />}
+                        suffix="$"
+                      />
+                    </Col>
+                    <Col xs={24} sm={8}>
+                      <Statistic
+                        title="Avg Sale Value"
+                        value={inventoryData.summary.periodAvgSaleValue}
+                        precision={2}
+                        valueStyle={{ color: "#1890ff" }}
+                        prefix={<BarChartOutlined />}
+                        suffix="$"
+                      />
+                    </Col>
+                  </Row>
+                </Card>
+              </Col>
+            </Row>
+          </Tabs.TabPane>
         </Tabs>
-
-        <Table
-          columns={columns}
-          dataSource={filteredData}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            position: ["bottomRight"],
-            showSizeChanger: true,
-            pageSizeOptions: ["10", "20", "50", "100"],
-            showTotal: (total, range) =>
-              `${range[0]}-${range[1]} of ${total} items`,
-          }}
-          size="middle"
-          scroll={{ x: "max-content" }}
-          className="border rounded-lg"
-        />
-      </Card>
-
-      {/* Settings Modal */}
-      <Modal
-        title="Inventory Settings"
-        open={settingsVisible}
-        onCancel={() => setSettingsVisible(false)}
-        onOk={() => setSettingsVisible(false)}
-        width={600}
-      >
-        <div className="space-y-6 py-4">
-          <div>
-            <h3 className="text-base font-medium mb-2">Low Stock Threshold</h3>
-            <div className="flex items-center">
-              <span className="mr-4 text-gray-600">Below</span>
-              <Input
-                type="number"
-                value={lowStockThreshold}
-                onChange={(e) => setLowStockThreshold(parseInt(e.target.value))}
-                className="w-24"
-                min={1}
-              />
-              <span className="ml-4 text-gray-600">
-                units will trigger low stock warning
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-base font-medium mb-2">
-              Expiry Warning Period
-            </h3>
-            <div className="flex items-center">
-              <span className="mr-4 text-gray-600">
-                Warn when products expire within
-              </span>
-              <Input
-                type="number"
-                value={expiryWarningDays}
-                onChange={(e) => setExpiryWarningDays(parseInt(e.target.value))}
-                className="w-24"
-                min={1}
-              />
-              <span className="ml-4 text-gray-600">days</span>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-base font-medium mb-2">Display Settings</h3>
-            <div className="flex items-center mb-4">
-              <span className="mr-4 text-gray-600 w-32">Default view</span>
-              <Select defaultValue="all" className="w-40">
-                <Option value="all">All Products</Option>
-                <Option value="low-stock">Low Stock</Option>
-                <Option value="expiring">Expiring Soon</Option>
-              </Select>
-            </div>
-
-            <div className="flex items-center">
-              <span className="mr-4 text-gray-600 w-32">Items per page</span>
-              <Select defaultValue="10" className="w-40">
-                <Option value="10">10</Option>
-                <Option value="20">20</Option>
-                <Option value="50">50</Option>
-                <Option value="100">100</Option>
-              </Select>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Add/Edit Item Modal */}
-      <Modal
-        title={currentItem ? "Edit Inventory Item" : "Add New Inventory Item"}
-        open={itemModalVisible}
-        onCancel={() => setItemModalVisible(false)}
-        footer={null}
-        width={700}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleFormSubmit}
-          initialValues={{
-            quantity: 0,
-            reorderLevel: 10,
-            expiryDate: dayjs().add(180, "day"),
-          }}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Form.Item
-              name="name"
-              label="Product Name"
-              rules={[{ required: true, message: "Please enter product name" }]}
-            >
-              <Input />
-            </Form.Item>
-
-            <Form.Item name="genericName" label="Generic Name">
-              <Input />
-            </Form.Item>
-
-            <Form.Item
-              name="category"
-              label="Category"
-              rules={[{ required: true, message: "Please select a category" }]}
-            >
-              <Select>
-                <Option value="Antibiotics">Antibiotics</Option>
-                <Option value="Painkillers">Painkillers</Option>
-                <Option value="Cardiovascular">Cardiovascular</Option>
-                <Option value="Vitamins">Vitamins</Option>
-                <Option value="Antidiabetic">Antidiabetic</Option>
-                <Option value="Other">Other</Option>
-              </Select>
-            </Form.Item>
-
-            <Form.Item name="supplier" label="Supplier">
-              <Select>
-                <Option value="Supplier 1">Supplier 1</Option>
-                <Option value="Supplier 2">Supplier 2</Option>
-                <Option value="Supplier 3">Supplier 3</Option>
-                <Option value="Supplier 4">Supplier 4</Option>
-                <Option value="Supplier 5">Supplier 5</Option>
-              </Select>
-            </Form.Item>
-
-            <Form.Item
-              name="batchNumber"
-              label="Batch Number"
-              rules={[{ required: true, message: "Please enter batch number" }]}
-            >
-              <Input />
-            </Form.Item>
-
-            <Form.Item
-              name="expiryDate"
-              label="Expiry Date"
-              rules={[{ required: true, message: "Please select expiry date" }]}
-            >
-              <DatePicker className="w-full" />
-            </Form.Item>
-
-            <Form.Item
-              name="quantity"
-              label="Quantity"
-              rules={[{ required: true, message: "Please enter quantity" }]}
-            >
-              <Input type="number" min={0} />
-            </Form.Item>
-
-            <Form.Item
-              name="reorderLevel"
-              label="Reorder Level"
-              rules={[
-                { required: true, message: "Please enter reorder level" },
-              ]}
-            >
-              <Input type="number" min={0} />
-            </Form.Item>
-
-            <Form.Item
-              name="costPrice"
-              label="Cost Price"
-              rules={[{ required: true, message: "Please enter cost price" }]}
-            >
-              <Input type="number" min={0} step={0.01} prefix="$" />
-            </Form.Item>
-
-            <Form.Item
-              name="sellingPrice"
-              label="Selling Price"
-              rules={[
-                { required: true, message: "Please enter selling price" },
-              ]}
-            >
-              <Input type="number" min={0} step={0.01} prefix="$" />
-            </Form.Item>
-          </div>
-
-          <Form.Item name="description" label="Description">
-            <Input.TextArea rows={3} />
-          </Form.Item>
-
-          <Form.Item className="mb-0 text-right">
-            <Space>
-              <Button onClick={() => setItemModalVisible(false)}>Cancel</Button>
-              <Button type="primary" htmlType="submit">
-                {currentItem ? "Update" : "Add"} Item
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
+      </div>
     </div>
   );
 };
 
-export default InventoryPage;
+export default InventoryDashboard;

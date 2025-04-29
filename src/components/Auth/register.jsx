@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Form,
@@ -11,8 +11,8 @@ import {
   Layout,
   Row,
   Col,
-  Select,
   Checkbox,
+  Space,
 } from "antd";
 import {
   UserOutlined,
@@ -20,12 +20,14 @@ import {
   MailOutlined,
   PhoneOutlined,
   ShopOutlined,
+  NumberOutlined,
+  IdcardOutlined,
+  HomeOutlined,
 } from "@ant-design/icons";
 import { useAuthStore } from "../../Store/stores.js";
 
 const { Title, Text } = Typography;
 const { Content } = Layout;
-const { Option } = Select;
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -43,11 +45,17 @@ const RegisterPage = () => {
 
     try {
       const userData = {
-        name: values.name,
+        firstName: values.firstName,
+        lastName: values.lastName,
         email: values.email,
         password: values.password,
         phoneNumber: values.phoneNumber,
-        businessType: values.businessType,
+        storeName: values.storeName,
+        registrationNumber: values.registrationNumber,
+        licenseNumber: values.licenseNumber,
+        storePhone: values.storePhone,
+        storeEmail: values.storeEmail,
+        address: values.address,
       };
 
       await register(userData);
@@ -67,20 +75,39 @@ const RegisterPage = () => {
     }
   };
 
+  const validatePhoneNumber = (_, value) => {
+    const phoneRegex = /^\+?[0-9]{10,15}$/;
+    if (!value || phoneRegex.test(value)) {
+      return Promise.resolve();
+    }
+    return Promise.reject(new Error("Please enter a valid phone number"));
+  };
+
+  const validateEmail = (_, value) => {
+    const emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+    if (!value || emailRegex.test(value)) {
+      return Promise.resolve();
+    }
+    return Promise.reject(new Error("Please enter a valid email address"));
+  };
+
   return (
-    <Layout className="register-layout" style={{ minHeight: "100vh" }}>
+    <Layout
+      className="register-layout"
+      style={{ minHeight: "100vh", background: "#f5f5f5" }}
+    >
       <Content>
         <Row
           justify="center"
           align="middle"
           style={{ minHeight: "100vh", padding: "24px 0" }}
         >
-          <Col xs={22} sm={20} md={16} lg={12} xl={10}>
+          <Col xs={23} sm={22} md={20} lg={18} xl={16}>
             <Card
               bordered={false}
               style={{
-                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-                borderRadius: "8px",
+                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.1)",
+                borderRadius: "12px",
               }}
             >
               <div style={{ textAlign: "center", marginBottom: "24px" }}>
@@ -90,7 +117,12 @@ const RegisterPage = () => {
                 >
                   PharmManager
                 </Title>
-                <Text type="secondary">Create a new account</Text>
+                <Title level={4} style={{ marginBottom: "8px" }}>
+                  Create Your Account
+                </Title>
+                <Text type="secondary">
+                  Complete the form below to register your pharmacy
+                </Text>
               </div>
 
               {error && (
@@ -99,6 +131,9 @@ const RegisterPage = () => {
                     marginBottom: "16px",
                     color: "red",
                     textAlign: "center",
+                    padding: "8px",
+                    background: "#ffeeee",
+                    borderRadius: "4px",
                   }}
                 >
                   {error}
@@ -112,25 +147,51 @@ const RegisterPage = () => {
                 layout="vertical"
                 size="large"
                 autoComplete="off"
+                requiredMark="optional"
               >
+                <Divider orientation="left">
+                  <Space>
+                    <UserOutlined />
+                    <span>Personal Information</span>
+                  </Space>
+                </Divider>
+
                 <Row gutter={16}>
-                  <Col span={24}>
+                  <Col xs={24} sm={12}>
                     <Form.Item
-                      name="name"
-                      label="Full Name"
+                      name="firstName"
+                      label="First Name"
                       rules={[
                         {
                           required: true,
-                          message: "Please enter your full name",
+                          message: "Please enter your first name",
+                        },
+                        {
+                          min: 2,
+                          message: "First name must be at least 2 characters",
                         },
                       ]}
                     >
-                      <Input
-                        prefix={
-                          <UserOutlined className="site-form-item-icon" />
-                        }
-                        placeholder="Full Name"
-                      />
+                      <Input placeholder="First Name" />
+                    </Form.Item>
+                  </Col>
+
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="lastName"
+                      label="Last Name"
+                      rules={[
+                        {
+                          required: true,
+                          message: "Please enter your last name",
+                        },
+                        {
+                          min: 2,
+                          message: "Last name must be at least 2 characters",
+                        },
+                      ]}
+                    >
+                      <Input placeholder="Last Name" />
                     </Form.Item>
                   </Col>
                 </Row>
@@ -142,20 +203,16 @@ const RegisterPage = () => {
                       label="Email"
                       rules={[
                         { required: true, message: "Please enter your email" },
-                        {
-                          type: "email",
-                          message: "Please enter a valid email",
-                        },
+                        { validator: validateEmail },
                       ]}
                     >
                       <Input
-                        prefix={
-                          <MailOutlined className="site-form-item-icon" />
-                        }
-                        placeholder="Email"
+                        prefix={<MailOutlined />}
+                        placeholder="Your Email"
                       />
                     </Form.Item>
                   </Col>
+
                   <Col xs={24} sm={12}>
                     <Form.Item
                       name="phoneNumber"
@@ -165,39 +222,16 @@ const RegisterPage = () => {
                           required: true,
                           message: "Please enter your phone number",
                         },
+                        { validator: validatePhoneNumber },
                       ]}
                     >
                       <Input
-                        prefix={
-                          <PhoneOutlined className="site-form-item-icon" />
-                        }
-                        placeholder="Phone Number"
+                        prefix={<PhoneOutlined />}
+                        placeholder="Your Phone Number"
                       />
                     </Form.Item>
                   </Col>
                 </Row>
-
-                <Form.Item
-                  name="businessType"
-                  label="Business Type"
-                  rules={[
-                    {
-                      required: true,
-                      message: "Please select your business type",
-                    },
-                  ]}
-                >
-                  <Select
-                    placeholder="Select your business type"
-                    suffixIcon={<ShopOutlined />}
-                  >
-                    <Option value="pharmacy">Pharmacy</Option>
-                    <Option value="clinic">Clinic</Option>
-                    <Option value="hospital">Hospital</Option>
-                    <Option value="laboratory">Laboratory</Option>
-                    <Option value="other">Other</Option>
-                  </Select>
-                </Form.Item>
 
                 <Row gutter={16}>
                   <Col xs={24} sm={12}>
@@ -213,16 +247,21 @@ const RegisterPage = () => {
                           min: 8,
                           message: "Password must be at least 8 characters",
                         },
+                        {
+                          pattern:
+                            /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*#?&])[A-Za-z\d@$!%*#?&]{8,}$/,
+                          message:
+                            "Password must contain letters, numbers, and special characters",
+                        },
                       ]}
                     >
                       <Input.Password
-                        prefix={
-                          <LockOutlined className="site-form-item-icon" />
-                        }
+                        prefix={<LockOutlined />}
                         placeholder="Password"
                       />
                     </Form.Item>
                   </Col>
+
                   <Col xs={24} sm={12}>
                     <Form.Item
                       name="confirmPassword"
@@ -246,10 +285,141 @@ const RegisterPage = () => {
                       ]}
                     >
                       <Input.Password
-                        prefix={
-                          <LockOutlined className="site-form-item-icon" />
-                        }
+                        prefix={<LockOutlined />}
                         placeholder="Confirm Password"
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Divider orientation="left">
+                  <Space>
+                    <ShopOutlined />
+                    <span>Pharmacy Information</span>
+                  </Space>
+                </Divider>
+
+                <Row gutter={16}>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="storeName"
+                      label="Pharmacy Name"
+                      rules={[
+                        {
+                          required: true,
+                          message: "Please enter your pharmacy name",
+                        },
+                        {
+                          min: 3,
+                          message:
+                            "Pharmacy name must be at least 3 characters",
+                        },
+                      ]}
+                    >
+                      <Input
+                        prefix={<ShopOutlined />}
+                        placeholder="Pharmacy Name"
+                      />
+                    </Form.Item>
+                  </Col>
+
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="storePhone"
+                      label="Pharmacy Phone Number"
+                      rules={[
+                        {
+                          required: true,
+                          message: "Please enter the pharmacy phone number",
+                        },
+                        { validator: validatePhoneNumber },
+                      ]}
+                    >
+                      <Input
+                        prefix={<PhoneOutlined />}
+                        placeholder="Pharmacy Phone Number"
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="registrationNumber"
+                      label="Registration Number"
+                      rules={[
+                        {
+                          required: true,
+                          message: "Please enter registration number",
+                        },
+                      ]}
+                    >
+                      <Input
+                        prefix={<NumberOutlined />}
+                        placeholder="Registration Number"
+                      />
+                    </Form.Item>
+                  </Col>
+
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="licenseNumber"
+                      label="License Number"
+                      rules={[
+                        {
+                          required: true,
+                          message: "Please enter license number",
+                        },
+                      ]}
+                    >
+                      <Input
+                        prefix={<IdcardOutlined />}
+                        placeholder="License Number"
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+
+                <Row gutter={16}>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      name="storeEmail"
+                      label="Pharmacy Email"
+                      rules={[
+                        {
+                          required: true,
+                          message: "Please enter the pharmacy email",
+                        },
+                        { validator: validateEmail },
+                      ]}
+                    >
+                      <Input
+                        prefix={<MailOutlined />}
+                        placeholder="Pharmacy Email"
+                      />
+                    </Form.Item>
+                  </Col>
+
+                  <Col xs={24}>
+                    <Form.Item
+                      name="address"
+                      label="Pharmacy Address"
+                      rules={[
+                        {
+                          required: true,
+                          message: "Please enter the pharmacy address",
+                        },
+                        {
+                          min: 10,
+                          message: "Please enter a complete address",
+                        },
+                      ]}
+                    >
+                      <Input.TextArea
+                        prefix={<HomeOutlined />}
+                        placeholder="Full Address"
+                        rows={3}
                       />
                     </Form.Item>
                   </Col>
@@ -283,6 +453,7 @@ const RegisterPage = () => {
                     htmlType="submit"
                     loading={isLoading}
                     block
+                    style={{ height: "45px", fontSize: "16px" }}
                   >
                     Create Account
                   </Button>

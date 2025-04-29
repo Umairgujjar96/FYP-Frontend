@@ -9,6 +9,7 @@ export const useProductStore = create(
     (set, get) => ({
       products: [],
       categories: [],
+      inventory: null,
       isLoading: false,
       error: null,
 
@@ -32,6 +33,42 @@ export const useProductStore = create(
 
           set({ products: data, isLoading: false }); // Update state correctly
           return data;
+        } catch (error) {
+          console.error(error);
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
+      fetchInventory: async () => {
+        set({ isLoading: true, error: null });
+
+        try {
+          const token = useAuthStore.getState().token;
+          const storeId = useAuthStore.getState().currentStore?.id;
+
+          if (!storeId) throw new Error("No store selected");
+
+          const response = await axios.get(
+            `${BaseUrl}/api/product/products/inventory`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          // Axios auto-resolves response.data, this contains the entire response
+          const data = response.data;
+
+          if (!data.success) {
+            throw new Error(data.message || "Failed to fetch inventory data");
+          }
+
+          // Store the structured inventory data
+          set({ inventory: data.data, isLoading: false });
+
+          return data.data;
         } catch (error) {
           console.error(error);
           set({ error: error.message, isLoading: false });

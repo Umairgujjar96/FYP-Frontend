@@ -27,6 +27,10 @@ import SalesPage from "./components/StoresPages/SalesPage";
 import InventoryPage from "./components/StoresPages/InventoryPage";
 import SubscriptionPage from "./components/Auth/Subcription";
 import StartScreen from "./components/SplashScreen";
+import SalesReportPage from "./components/Dashboard/GenerateReport";
+import SalesReportComponent from "./components/Dashboard/GenerateReport";
+import ProfitReportComponent from "./components/Dashboard/ProfitReport";
+import InventoryDashboard from "./components/StoresPages/InventoryPage";
 // import EnhancedPOS from "./components/POS/POS2";
 // import POSHomePage from "./components/POS/POS2";
 // import PharmacyPOS from "./components/POS/POS2";
@@ -157,10 +161,26 @@ const App = () => {
                     }
                   />
                   <Route
+                    path="/sales-report"
+                    element={
+                      <ProtectedRoute>
+                        <SalesReportComponent />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
                     path="/store/suppliers"
                     element={
                       <ProtectedRoute>
                         <SupplierList />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/store/profit"
+                    element={
+                      <ProtectedRoute>
+                        <ProfitReportComponent />
                       </ProtectedRoute>
                     }
                   />
@@ -200,7 +220,7 @@ const App = () => {
                     path="/store/inventory"
                     element={
                       <ProtectedRoute>
-                        <InventoryPage />
+                        <InventoryDashboard />
                       </ProtectedRoute>
                     }
                   />

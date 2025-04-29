@@ -1,382 +1,501 @@
-import React, { useState } from "react";
+// ReturnProductsModal.jsx
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   Form,
   Input,
   Button,
-  Table,
-  InputNumber,
   Select,
-  message,
+  InputNumber,
+  Table,
+  Spin,
+  notification,
+  Divider,
+  Typography,
+  Space,
+  Tooltip,
 } from "antd";
 import {
+  ExclamationCircleOutlined,
   SearchOutlined,
-  PlusOutlined,
-  DeleteOutlined,
+  ArrowLeftOutlined,
+  CheckCircleOutlined,
+  InfoCircleOutlined,
 } from "@ant-design/icons";
+import axios from "axios";
+import { useReturnStore } from "../Store/useReturnStore";
+// import { useReturnStore } from '../stores/returnStore';
 
+const { Title, Text } = Typography;
 const { Option } = Select;
+const { TextArea } = Input;
 
-const PharmacyReturnModal = ({ visible, onClose }) => {
+const ReturnProductsModal = ({ visible, onCancel }) => {
   const [form] = Form.useForm();
-  const [returnItems, setReturnItems] = useState([]);
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
+  const [searchForm] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [returnSubmitted, setReturnSubmitted] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [currentStep, setCurrentStep] = useState(1); // 1: Search, 2: Select Items, 3: Confirm
 
-  // Mock return reasons specific to pharmacy
-  const returnReasons = [
-    "Expired medication",
-    "Wrong medication dispensed",
-    "Customer changed mind",
-    "Adverse reaction",
-    "Prescription changed",
-    "Packaging damaged",
-    "Other",
-  ];
+  // Get state and actions from Zustand store
+  const {
+    invoiceNumber,
+    sale,
+    returnItems,
+    totalRefundAmount,
+    searchInvoice,
+    setSale,
+    addReturnItem,
+    removeReturnItem,
+    updateReturnItem,
+    resetReturn,
+    submitReturn,
+  } = useReturnStore();
 
-  const handleSearch = () => {
-    const productName = form.getFieldValue("productSearch");
-    if (!productName || productName.trim() === "") {
-      message.error("Please enter a product name");
-      return;
+  // Reset the form and state when modal opens/closes
+  useEffect(() => {
+    if (visible) {
+      searchForm.resetFields();
+      form.resetFields();
+    } else {
+      resetReturn();
+      setCurrentStep(1);
     }
+  }, [visible, resetReturn, searchForm, form]);
 
-    // Simulate API search
-    setSearching(true);
-    setTimeout(() => {
-      // Mock search results
-      const mockResults = [
-        {
-          id: 1,
-          name: "Acetaminophen 500mg",
-          sku: "MED-1001",
-          price: 12.99,
-          stock: 45,
-        },
-        {
-          id: 2,
-          name: "Acetaminophen Extra Strength",
-          sku: "MED-1002",
-          price: 15.99,
-          stock: 32,
-        },
-        {
-          id: 3,
-          name: "Acetaminophen Children's",
-          sku: "MED-1003",
-          price: 9.99,
-          stock: 28,
-        },
-      ].filter((item) =>
-        item.name.toLowerCase().includes(productName.toLowerCase())
-      );
-
-      setSearchResults(mockResults);
-      setSearching(false);
-
-      if (mockResults.length === 0) {
-        message.info("No products found");
-      }
-    }, 300);
-  };
-
-  const addToReturn = (product) => {
-    if (returnItems.some((item) => item.id === product.id)) {
-      message.warning("Product already added to return");
-      return;
+  // Handle invoice search
+  const handleSearch = async (values) => {
+    try {
+      setSearchLoading(true);
+      await searchInvoice(values.invoiceNumber);
+      setCurrentStep(2);
+    } catch (error) {
+      notification.error({
+        message: "Error",
+        description: error.message || "Failed to find the invoice",
+      });
+    } finally {
+      setSearchLoading(false);
     }
-
-    setReturnItems([
-      ...returnItems,
-      {
-        ...product,
-        returnQty: 1,
-        reason: returnReasons[0],
-        subtotal: product.price,
-      },
-    ]);
-
-    // Clear search
-    form.setFieldsValue({ productSearch: "" });
-    setSearchResults([]);
   };
 
-  const handleReturnQtyChange = (id, value) => {
-    setReturnItems(
-      returnItems.map((item) => {
-        if (item.id === id) {
-          return { ...item, returnQty: value, subtotal: value * item.price };
-        }
-        return item;
-      })
-    );
-  };
+  // Handle adding an item to return list
+  const handleAddItem = (item) => {
+    if (item.remainingQuantity > 0) {
+      // Calculate the discounted unit price that the customer actually paid
+      const discountPerUnit =
+        item.discountPerUnit ||
+        (item.discount ? item.discount / item.quantity : 0);
+      const effectiveUnitPrice =
+        item.effectiveUnitPrice || item.unitPrice - discountPerUnit;
 
-  const handleReasonChange = (id, value) => {
-    setReturnItems(
-      returnItems.map((item) => {
-        if (item.id === id) {
-          return { ...item, reason: value };
-        }
-        return item;
-      })
-    );
-  };
-
-  const removeReturnItem = (id) => {
-    setReturnItems(returnItems.filter((item) => item.id !== id));
-  };
-
-  const getReturnTotal = () => {
-    return returnItems
-      .reduce((total, item) => total + item.subtotal, 0)
-      .toFixed(2);
-  };
-
-  const handleSubmit = () => {
-    if (returnItems.length === 0) {
-      message.error("Please add at least one product to return");
-      return;
+      addReturnItem({
+        productId: item.product._id,
+        batchId: item.batch._id,
+        name: item.product.name,
+        batchNumber: item.batch.batchNumber,
+        unitPrice: item.unitPrice,
+        discountPerUnit: discountPerUnit,
+        effectiveUnitPrice: effectiveUnitPrice,
+        maxQuantity: item.remainingQuantity,
+        quantity: 1, // Default to 1
+        subtotal: effectiveUnitPrice, // Use the effective price for subtotal
+      });
     }
+  };
 
-    setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+  // Handle quantity change
+  const handleQuantityChange = (productId, batchId, quantity) => {
+    updateReturnItem(productId, batchId, quantity);
+  };
+
+  // Handle form submission
+  const handleSubmit = async (values) => {
+    try {
+      setLoading(true);
+      const result = await submitReturn(sale._id, values.reason);
+
+      notification.success({
+        message: "Return Successful",
+        description: `Products returned successfully. Refund amount: $${result.totalRefundAmount.toFixed(
+          2
+        )}`,
+      });
+
+      setCurrentStep(3); // Move to confirmation screen
+    } catch (error) {
+      notification.error({
+        message: "Return Failed",
+        description: error.message || "Failed to process return",
+      });
+    } finally {
       setLoading(false);
-      setReturnSubmitted(true);
-      message.success("Return processed successfully");
-    }, 500);
+    }
   };
 
-  const handleClose = () => {
-    form.resetFields();
-    setReturnItems([]);
-    setSearchResults([]);
-    setReturnSubmitted(false);
-    onClose();
-  };
-
-  const searchResultColumns = [
+  // Column definitions for the sale items table
+  const saleItemColumns = [
     {
-      title: "Name",
-      dataIndex: "name",
-      key: "name",
+      title: "Product",
+      key: "product",
+      render: (_, item) => (
+        <div>
+          <div className="font-medium">{item.product.name}</div>
+          {item.product.genericName && (
+            <div className="text-gray-500 text-xs">
+              {item.product.genericName}
+            </div>
+          )}
+        </div>
+      ),
     },
     {
-      title: "SKU",
-      dataIndex: "sku",
-      key: "sku",
+      title: "Batch",
+      dataIndex: ["batch", "batchNumber"],
+      key: "batch",
     },
     {
       title: "Price",
-      dataIndex: "price",
       key: "price",
-      render: (price) => `$${price.toFixed(2)}`,
+      render: (_, item) => {
+        const discountPerUnit =
+          item.discountPerUnit ||
+          (item.discount ? item.discount / item.quantity : 0);
+        const effectiveUnitPrice =
+          item.effectiveUnitPrice || item.unitPrice - discountPerUnit;
+
+        return (
+          <Tooltip
+            title={
+              discountPerUnit > 0
+                ? `Original: $${item.unitPrice.toFixed(
+                    2
+                  )}, Discount: $${discountPerUnit.toFixed(2)} per unit`
+                : null
+            }
+          >
+            <div className="cursor-help">
+              <div>${effectiveUnitPrice.toFixed(2)}</div>
+              {discountPerUnit > 0 && (
+                <div className="text-green-600 text-xs flex items-center">
+                  <span>After discount</span>
+                  <InfoCircleOutlined className="ml-1" />
+                </div>
+              )}
+            </div>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: "Qty",
+      key: "quantity",
+      render: (_, item) => (
+        <span>
+          {item.remainingQuantity} of {item.quantity}
+        </span>
+      ),
     },
     {
       title: "Action",
       key: "action",
-      render: (_, record) => (
-        <Button
-          type="primary"
-          size="small"
-          onClick={() => addToReturn(record)}
-          icon={<PlusOutlined />}
-          className="bg-blue-500"
-        >
-          Add
-        </Button>
-      ),
+      render: (_, item) => {
+        const isItemSelected = returnItems.some(
+          (returnItem) =>
+            returnItem.productId === item.product._id &&
+            returnItem.batchId === item.batch._id
+        );
+        const isReturnAvailable = item.remainingQuantity > 0;
+
+        return (
+          <Button
+            type={isItemSelected ? "default" : "primary"}
+            size="small"
+            disabled={!isReturnAvailable}
+            onClick={() =>
+              isItemSelected
+                ? removeReturnItem(item.product._id, item.batch._id)
+                : handleAddItem(item)
+            }
+          >
+            {isItemSelected ? "Remove" : "Return"}
+          </Button>
+        );
+      },
     },
   ];
 
+  // Column definitions for the return items table
   const returnItemColumns = [
     {
       title: "Product",
       dataIndex: "name",
       key: "name",
-      width: "30%",
+    },
+    {
+      title: "Batch",
+      dataIndex: "batchNumber",
+      key: "batchNumber",
     },
     {
       title: "Price",
-      dataIndex: "price",
       key: "price",
-      render: (price) => `$${price.toFixed(2)}`,
+      render: (_, item) => {
+        const hasDiscount = item.discountPerUnit > 0;
+
+        return (
+          <Tooltip
+            title={
+              hasDiscount
+                ? `Original: $${item.unitPrice.toFixed(
+                    2
+                  )}, Discount: $${item.discountPerUnit.toFixed(2)} per unit`
+                : null
+            }
+          >
+            <div className="cursor-help">
+              <div>${item.effectiveUnitPrice.toFixed(2)}</div>
+              {hasDiscount && (
+                <div className="text-green-600 text-xs flex items-center">
+                  <span>After discount</span>
+                  <InfoCircleOutlined className="ml-1" />
+                </div>
+              )}
+            </div>
+          </Tooltip>
+        );
+      },
     },
     {
-      title: "Qty",
-      key: "returnQty",
-      width: "15%",
-      render: (_, record) => (
+      title: "Quantity",
+      key: "quantity",
+      render: (_, item) => (
         <InputNumber
           min={1}
-          max={99}
-          value={record.returnQty}
-          onChange={(value) => handleReturnQtyChange(record.id, value)}
-          size="small"
+          max={item.maxQuantity}
+          value={item.quantity}
+          onChange={(value) =>
+            handleQuantityChange(item.productId, item.batchId, value)
+          }
           className="w-16"
         />
       ),
     },
     {
-      title: "Reason",
-      key: "reason",
-      width: "25%",
-      render: (_, record) => (
-        <Select
-          value={record.reason}
-          onChange={(value) => handleReasonChange(record.id, value)}
-          size="small"
-          style={{ width: "100%" }}
-        >
-          {returnReasons.map((reason) => (
-            <Option key={reason} value={reason}>
-              {reason}
-            </Option>
-          ))}
-        </Select>
-      ),
+      title: "Refund Amount",
+      key: "refundAmount",
+      render: (_, item) =>
+        `$${(item.quantity * item.effectiveUnitPrice).toFixed(2)}`,
     },
     {
-      title: "Subtotal",
-      key: "subtotal",
-      render: (_, record) => `$${record.subtotal.toFixed(2)}`,
-    },
-    {
-      title: "",
+      title: "Action",
       key: "action",
-      width: "10%",
-      render: (_, record) => (
+      render: (_, item) => (
         <Button
           type="text"
           danger
-          icon={<DeleteOutlined />}
-          onClick={() => removeReturnItem(record.id)}
           size="small"
-        />
+          onClick={() => removeReturnItem(item.productId, item.batchId)}
+        >
+          Remove
+        </Button>
       ),
     },
   ];
 
-  // The main return form
-  const returnForm = (
-    <div>
-      <Form form={form} layout="vertical">
-        <div className="flex gap-2 mb-4">
-          <Form.Item name="productSearch" className="mb-0 flex-1">
-            <Input
-              placeholder="Search product by name"
-              prefix={<SearchOutlined />}
-              onPressEnter={handleSearch}
-            />
-          </Form.Item>
+  // Content for step 1: Invoice Search
+  const renderSearchStep = () => (
+    <div className="py-6">
+      <div className="text-center mb-6">
+        <Title level={4}>Search for Sale</Title>
+        <Text type="secondary">Enter the invoice number to find the sale</Text>
+      </div>
+
+      <Form form={searchForm} onFinish={handleSearch} layout="vertical">
+        <Form.Item
+          name="invoiceNumber"
+          rules={[
+            { required: true, message: "Please enter an invoice number" },
+          ]}
+        >
+          <Input
+            prefix={<SearchOutlined />}
+            placeholder="Enter Invoice Number"
+            size="large"
+            autoFocus
+          />
+        </Form.Item>
+
+        <Form.Item className="text-center">
           <Button
             type="primary"
-            onClick={handleSearch}
-            loading={searching}
-            className="bg-blue-500"
+            icon={<SearchOutlined />}
+            htmlType="submit"
+            loading={searchLoading}
+            size="large"
           >
-            Search
+            Search Invoice
           </Button>
-        </div>
+        </Form.Item>
       </Form>
-
-      {searchResults.length > 0 && (
-        <div className="mb-6">
-          <Table
-            dataSource={searchResults}
-            columns={searchResultColumns}
-            rowKey="id"
-            pagination={false}
-            size="small"
-          />
-        </div>
-      )}
-
-      <div className="mt-4">
-        <h3 className="text-lg font-medium mb-2">Return Items</h3>
-        {returnItems.length > 0 ? (
-          <Table
-            dataSource={returnItems}
-            columns={returnItemColumns}
-            rowKey="id"
-            pagination={false}
-            size="small"
-            footer={() => (
-              <div className="flex justify-between items-center">
-                <span>Total Items: {returnItems.length}</span>
-                <span className="font-medium text-lg">
-                  Total Refund: ${getReturnTotal()}
-                </span>
-              </div>
-            )}
-          />
-        ) : (
-          <div className="text-center py-8 bg-gray-50 rounded">
-            <p className="text-gray-500">No products added to return</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 
-  // Success content after return is processed
-  const successContent = (
-    <div className="text-center py-6">
-      <div className="text-green-500 text-5xl mb-4">✓</div>
-      <h3 className="text-xl font-medium mb-2">
-        Return Processed Successfully
-      </h3>
-      <p>Return reference: RTN-{Math.floor(Math.random() * 10000)}</p>
+  // Content for step 2: Select Items to Return
+  const renderSelectItemsStep = () => (
+    <div>
+      {sale && (
+        <div className="mb-4">
+          <div className="bg-gray-50 p-4 rounded-lg mb-4">
+            <div className="flex justify-between mb-2">
+              <Text strong>Invoice: </Text>
+              <Text>{sale.invoiceNumber}</Text>
+            </div>
+            <div className="flex justify-between mb-2">
+              <Text strong>Date: </Text>
+              <Text>{new Date(sale.createdAt).toLocaleDateString()}</Text>
+            </div>
+            <div className="flex justify-between mb-2">
+              <Text strong>Customer: </Text>
+              <Text>
+                {sale.customer ? sale.customer.name : "Walk-in Customer"}
+              </Text>
+            </div>
+            <div className="flex justify-between mb-2">
+              <Text strong>Total: </Text>
+              <Text>${sale.total.toFixed(2)}</Text>
+            </div>
+            {sale.discount > 0 && (
+              <div className="flex justify-between">
+                <Text strong>Discount Applied: </Text>
+                <Text className="text-green-600">
+                  ${sale.discount.toFixed(2)}
+                </Text>
+              </div>
+            )}
+          </div>
 
-      <div className="bg-gray-50 p-4 rounded-md max-w-sm mx-auto my-6">
-        <div className="flex justify-between mb-2">
-          <span>Items Returned:</span>
-          <span>{returnItems.length}</span>
+          <Divider orientation="left">Sale Items</Divider>
+          <Table
+            dataSource={sale.items}
+            columns={saleItemColumns}
+            rowKey={(record) => `${record.product._id}-${record.batch._id}`}
+            pagination={false}
+            size="small"
+          />
+
+          {returnItems.length > 0 && (
+            <>
+              <Divider orientation="left">Items to Return</Divider>
+              <Table
+                dataSource={returnItems}
+                columns={returnItemColumns}
+                rowKey={(record) => `${record.productId}-${record.batchId}`}
+                pagination={false}
+                size="small"
+                footer={() => (
+                  <div className="flex justify-end">
+                    <Text strong>
+                      Total Refund: ${totalRefundAmount.toFixed(2)}
+                    </Text>
+                  </div>
+                )}
+              />
+
+              <Form
+                form={form}
+                onFinish={handleSubmit}
+                layout="vertical"
+                className="mt-4"
+              >
+                <Form.Item
+                  name="reason"
+                  label="Return Reason"
+                  rules={[
+                    {
+                      required: true,
+                      message: "Please provide a reason for return",
+                    },
+                  ]}
+                >
+                  <TextArea rows={3} placeholder="Enter reason for return" />
+                </Form.Item>
+
+                <div className="flex justify-between mt-4">
+                  <Button
+                    icon={<ArrowLeftOutlined />}
+                    onClick={() => {
+                      setCurrentStep(1);
+                      resetReturn();
+                    }}
+                  >
+                    Back to Search
+                  </Button>
+
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    loading={loading}
+                    disabled={returnItems.length === 0}
+                  >
+                    Process Return
+                  </Button>
+                </div>
+              </Form>
+            </>
+          )}
         </div>
-        <div className="flex justify-between font-medium">
-          <span>Total Refund:</span>
-          <span>${getReturnTotal()}</span>
-        </div>
+      )}
+    </div>
+  );
+
+  // Content for step 3: Confirmation
+  const renderConfirmationStep = () => (
+    <div className="text-center py-8">
+      <div className="mb-6">
+        <CheckCircleOutlined className="text-green-500 text-6xl" />
+      </div>
+      <Title level={3}>Return Processed Successfully</Title>
+      <Text>
+        The products have been returned and the inventory has been updated.
+      </Text>
+      <div className="mt-8">
+        <Button type="primary" onClick={onCancel}>
+          Close
+        </Button>
       </div>
     </div>
   );
 
   return (
     <Modal
-      title="Process Return"
-      open={visible}
-      onCancel={handleClose}
-      width={800}
-      footer={
-        returnSubmitted
-          ? [
-              <Button key="close" onClick={handleClose} className="bg-white">
-                Close
-              </Button>,
-            ]
-          : [
-              <Button key="cancel" onClick={handleClose} className="bg-white">
-                Cancel
-              </Button>,
-              <Button
-                key="submit"
-                type="primary"
-                onClick={handleSubmit}
-                loading={loading}
-                disabled={returnItems.length === 0}
-                className="bg-blue-500"
-              >
-                Process Return
-              </Button>,
-            ]
+      title={
+        <div className="flex items-center">
+          {currentStep > 1 && currentStep < 3 && (
+            <Button
+              type="text"
+              icon={<ArrowLeftOutlined />}
+              onClick={() => setCurrentStep(currentStep - 1)}
+              className="mr-2"
+            />
+          )}
+          <span>Process Product Return</span>
+        </div>
       }
+      open={visible}
+      onCancel={onCancel}
+      footer={null}
+      width={800}
+      maskClosable={false}
+      destroyOnClose
     >
-      {returnSubmitted ? successContent : returnForm}
+      <Spin spinning={loading || searchLoading}>
+        {currentStep === 1 && renderSearchStep()}
+        {currentStep === 2 && renderSelectItemsStep()}
+        {currentStep === 3 && renderConfirmationStep()}
+      </Spin>
     </Modal>
   );
 };
 
-export default PharmacyReturnModal;
+export default ReturnProductsModal;

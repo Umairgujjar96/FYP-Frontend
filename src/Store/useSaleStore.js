@@ -1,3 +1,4 @@
+// Updated useSaleStore.js with enhanced reporting capabilities
 import { create } from "zustand";
 import axios from "axios";
 import { useAuthStore } from "./stores";
@@ -76,6 +77,7 @@ const useSaleStore = create((set, get) => ({
       return []; // Return empty array instead of undefined
     }
   },
+
   // Fetch Sale by ID
   fetchSaleById: async (saleId) => {
     set({ loading: true, error: null });
@@ -146,7 +148,7 @@ const useSaleStore = create((set, get) => ({
 
       const response = await axios.patch(
         `${BaseUrl}/api/sales/${saleId}/payment-status`,
-        statusData, // ✅ Send statusData as the request body (Fix)
+        statusData,
         {
           headers: {
             "Content-Type": "application/json",
@@ -200,29 +202,117 @@ const useSaleStore = create((set, get) => ({
     }
   },
 
-  // Generate Sales Report
-  generateSalesReport: async (reportParams = {}) => {
+  // ENHANCED REPORTING METHODS
+
+  // Generate Sales Report - Updated with your API structure
+  fetchSalesReport: async (reportParams = {}) => {
     set({ loading: true, error: null });
     try {
       const token = useAuthStore.getState().token;
-      const storeId = useAuthStore.getState().currentStore?.id;
+      const storeId =
+        reportParams.storeId || useAuthStore.getState().currentStore?.id;
 
-      const response = await axios.get(`${BaseUrl}/api/sales/reports/sales`, {
-        params: reportParams,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      // If no store ID provided and not admin, use current store
+      if (!reportParams.storeId && !storeId) {
+        throw new Error("No store selected for report generation");
+      }
+
+      const payload = {
+        ...reportParams,
+        storeId: storeId,
+      };
+
+      const response = await axios.post(
+        `${BaseUrl}/api/sales/reports/generate`,
+        payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        set({
+          salesReport: response.data.report,
+          loading: false,
+        });
+        return response.data.report;
+      } else {
+        throw new Error(response.data.message || "Failed to generate report");
+      }
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to generate sales report";
       set({
-        salesReport: response.data.data,
+        error: errorMessage,
         loading: false,
       });
-      return response.data.data;
+      throw error;
+    }
+  },
+
+  // Export Sales Report as CSV
+  exportSalesReport: async (reportParams = {}) => {
+    set({ loading: true, error: null });
+    try {
+      const token = useAuthStore.getState().token;
+      const storeId =
+        reportParams.storeId || useAuthStore.getState().currentStore?.id;
+
+      // If no store ID provided and not admin, use current store
+      if (!reportParams.storeId && !storeId) {
+        throw new Error("No store selected for report export");
+      }
+
+      const payload = {
+        ...reportParams,
+        storeId: storeId,
+        includeItemDetails: true, // Always include for exports
+        format: reportParams.format || "csv",
+      };
+
+      const response = await axios.post(
+        `${BaseUrl}/api/sales/reports/export`,
+        payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          responseType: "blob", // Important for file download
+        }
+      );
+
+      // Create file download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+
+      // Generate filename based on report type and date
+      const reportType =
+        payload.reportType.charAt(0).toUpperCase() +
+        payload.reportType.slice(1);
+      const date = new Date().toISOString().split("T")[0];
+      const filename = `${reportType}_Sales_Report_${date}.csv`;
+
+      link.href = url;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      set({ loading: false });
+      return true;
     } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to export sales report";
       set({
-        error:
-          error.response?.data?.message || "Failed to generate sales report",
+        error: errorMessage,
         loading: false,
       });
       throw error;
@@ -232,6 +322,10 @@ const useSaleStore = create((set, get) => ({
   // Utility Methods
   resetCurrentSale: () => {
     set({ currentSale: null });
+  },
+
+  clearReport: () => {
+    set({ salesReport: null });
   },
 
   clearError: () => {

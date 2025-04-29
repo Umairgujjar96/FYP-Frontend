@@ -32,6 +32,7 @@ import {
 import { useProductStore } from "../../Store/productStore";
 import useSaleStore from "../../Store/useSaleStore";
 import { useAuthStore } from "../../Store/stores";
+import VoiceReceiptModal from "./VoicePrintReciept";
 
 const { Title, Text } = Typography;
 const { Content } = Layout;
@@ -53,7 +54,14 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
   const [selectedBatches, setSelectedBatches] = useState({});
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [invoiceNumber, setInvoiceNumber] = useState("");
+  // Add these state variables at the top of your component
+  const [ActualprintModalVisible, setActualPrintModalVisible] = useState(false);
+  const [completedSaleData, setCompletedSaleData] = useState(null);
 
+  // Add this function to handle closing the receipt modal
+  const handleCloseReceiptModal = () => {
+    setPrintModalVisible(false);
+  };
   // Fetch from Zustand stores
   const { products, fetchProducts } = useProductStore();
   const { createSale } = useSaleStore();
@@ -81,7 +89,7 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
     (sum, item) => sum + item.unitPrice * item.quantity,
     0
   );
-  const taxAmount = cartTotal * 0.1;
+  const taxAmount = 0;
   const totalWithTax = cartTotal + taxAmount;
 
   // Generate invoice number on component mount
@@ -801,6 +809,10 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
       await createSale(saleData);
       message.success("Sale completed successfully!");
       setPrintModalVisible(false);
+
+      setCompletedSaleData(saleData);
+      setActualPrintModalVisible(true);
+
       setCart([]);
     } catch (error) {
       console.error("Error completing sale:", error);
@@ -1183,7 +1195,7 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
                           margin: "8px 0",
                         }}
                       >
-                        <Text>Tax (10%):</Text>
+                        <Text>Tax (0%):</Text>
                         <Text>Rs. {taxAmount.toFixed(2)}</Text>
                       </div>
                       <Divider style={{ margin: "8px 0" }} />
@@ -1309,6 +1321,12 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
           </div>
         </div>
       </Modal>
+      <VoiceReceiptModal
+        visible={ActualprintModalVisible}
+        onClose={() => setActualPrintModalVisible(false)}
+        saleData={completedSaleData}
+        invoiceNumber={invoiceNumber}
+      />
     </Modal>
   );
 };

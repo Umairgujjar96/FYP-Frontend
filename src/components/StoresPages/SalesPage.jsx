@@ -688,8 +688,8 @@ const SalesPage = () => {
               <td class="value">Rs. ${(saleData.subtotal || 0).toFixed(2)}</td>
             </tr>
             <tr>
-              <td class="label">Discount:</td>
-              <td class="value">Rs. ${(saleData.discount || 0).toFixed(2)}</td>
+              <td class="label">Discount (%):</td>
+              <td class="value">${(saleData.discount || 0).toFixed(2)}</td>
             </tr>
             <tr>
               <td class="label">Tax:</td>
@@ -1357,11 +1357,11 @@ const SalesPage = () => {
                         colSpan={5}
                         className="text-right"
                       >
-                        <span className="text-gray-600">Discount:</span>
+                        <span className="text-gray-600">Discount (%):</span>
                       </Table.Summary.Cell>
                       <Table.Summary.Cell index={1} align="right">
                         <span className="text-success">
-                          Rs. {currentSale.discount.toFixed(2)}
+                          {currentSale.discount.toFixed(2)}
                         </span>
                       </Table.Summary.Cell>
                     </Table.Summary.Row>

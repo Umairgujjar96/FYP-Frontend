@@ -3,6 +3,13 @@ import React, { useRef } from "react";
 const ReceiptPrinter = ({ saleData, storeInfo, onClose }) => {
   // Create a ref for the printable content
   const receiptRef = useRef(null);
+  console.log(saleData);
+
+  // Calculate the actual discount amount from the percentage
+  const discountPercentage = saleData?.discount || 0;
+  const discountAmount = saleData?.subtotal
+    ? (saleData.subtotal * discountPercentage) / 100
+    : 0;
 
   // Handle printing using the browser's native print functionality
   const handlePrint = () => {
@@ -187,9 +194,13 @@ const ReceiptPrinter = ({ saleData, storeInfo, onClose }) => {
             .map(
               (item) => `
                 <tr>
-                  <td>${item.productName || "Unknown Product"}</td>
+                  <td>${
+                    item.productName || item.product?.name || "Unknown Product"
+                  }</td>
                   <td class="text-center">${item.quantity || 0}</td>
-                  <td class="text-right">${formatCurrency(item.price)}</td>
+                  <td class="text-right">${formatCurrency(
+                    item.unitPrice || item.price
+                  )}</td>
                   <td class="text-right">${formatCurrency(item.subtotal)}</td>
                 </tr>
               `
@@ -204,8 +215,8 @@ const ReceiptPrinter = ({ saleData, storeInfo, onClose }) => {
           <span>${formatCurrency(saleData?.subtotal || 0)}</span>
         </div>
         <div>
-          <span>Discount:</span>
-          <span>${formatCurrency(saleData?.discount || 0)}</span>
+          <span>Discount (${discountPercentage}%):</span>
+          <span>-${formatCurrency(discountAmount)}</span>
         </div>
         <div class="total-line">
           <span>Total:</span>
@@ -371,11 +382,13 @@ const ReceiptPrinter = ({ saleData, storeInfo, onClose }) => {
                   {(saleData?.items || []).map((item, i) => (
                     <tr key={i}>
                       <td className="py-1">
-                        {item.productName || "Unknown Product"}
+                        {item.productName ||
+                          item.product?.name ||
+                          "Unknown Product"}
                       </td>
                       <td className="py-1 text-center">{item.quantity || 0}</td>
                       <td className="py-1 text-right">
-                        {formatCurrency(item.price)}
+                        {formatCurrency(item.unitPrice || item.price)}
                       </td>
                       <td className="py-1 text-right">
                         {formatCurrency(item.subtotal)}
@@ -391,8 +404,8 @@ const ReceiptPrinter = ({ saleData, storeInfo, onClose }) => {
                   <span>{formatCurrency(saleData?.subtotal || 0)}</span>
                 </div>
                 <div className="flex justify-between py-1">
-                  <span>Discount:</span>
-                  <span>{formatCurrency(saleData?.discount || 0)}</span>
+                  <span>Discount ({discountPercentage}%):</span>
+                  <span>-{formatCurrency(discountAmount)}</span>
                 </div>
                 <div className="flex justify-between py-1 font-bold border-t border-black">
                   <span>Total:</span>
