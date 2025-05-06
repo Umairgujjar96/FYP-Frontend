@@ -53,6 +53,7 @@ const CustomerPage = () => {
     createCustomer,
     updateCustomer,
     uploadPrescription,
+    downloadPrescription, // Add this function to your store if it doesn't exist
   } = useCustomerStore();
 
   // Get current user's store from auth store (assuming structure)
@@ -74,6 +75,7 @@ const CustomerPage = () => {
   const [viewPrescriptionModal, setViewPrescriptionModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedPrescription, setSelectedPrescription] = useState(null);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
   // Load customers on mount
   useEffect(() => {
@@ -224,6 +226,9 @@ const CustomerPage = () => {
   const showViewPrescriptionModal = (customer) => {
     setSelectedCustomer(customer);
     setViewPrescriptionModal(true);
+    if (customer.prescriptions && customer.prescriptions.length > 0) {
+      setSelectedPrescription(customer.prescriptions[0]);
+    }
   };
 
   // New function to view a specific prescription
@@ -231,17 +236,75 @@ const CustomerPage = () => {
     setSelectedPrescription(prescription);
   };
 
-  // Helper function to determine file type icon
-  const getFileIcon = (fileUrl) => {
-    if (!fileUrl) return <FileTextOutlined />;
+  // Handle prescription download
+  // const handleDownloadPrescription = async (customerId, prescriptionId) => {
+  //   if (!customerId || !prescriptionId) {
+  //     message.error("Unable to identify prescription");
+  //     return;
+  //   }
 
-    const extension = fileUrl.split(".").pop().toLowerCase();
-    if (["pdf"].includes(extension)) {
-      return <FilePdfOutlined />;
-    } else if (["jpg", "jpeg", "png", "gif"].includes(extension)) {
-      return <FileImageOutlined />;
+  //   const prescriptionViewUrl = `/prescriptions/view/${customerId}/${prescriptionId}`;
+  //   window.open(prescriptionViewUrl, "_blank"); // Open in new tab
+
+  //   // setDownloadLoading(true);
+  //   // try {
+  //   //   await downloadPrescription(customerId, prescriptionId);
+  //   //   message.success("Prescription downloaded successfully");
+  //   //   setDownloadLoading(false);
+  //   // } catch (error) {
+  //   //   console.error("Download error:", error);
+  //   //   message.error("Failed to download prescription");
+  //   //   setDownloadLoading(false);
+  //   // }
+  // };
+
+  const handleDownloadPrescription = async (prescription) => {
+    if (!prescription || !prescription.file) {
+      message.error("Prescription file not available");
+      return;
     }
+
+    try {
+      // Extract filename from the full Windows path
+      const fileName = prescription.file.split("\\").pop();
+
+      // Construct the full URL
+      const fileUrl = `http://localhost:5000/uploads/prescriptions/${fileName}`;
+
+      // Open the file in a new browser tab
+      window.open(fileUrl, "_blank");
+    } catch (error) {
+      console.error("Error opening prescription:", error);
+      message.error("Failed to open prescription file");
+    }
+  };
+
+  // Helper function to determine file type icon
+  const getFileIcon = (prescription) => {
+    if (!prescription) return <FileTextOutlined />;
+
+    if (prescription.file) {
+      const filePath = prescription.file;
+      const extension = filePath.split(".").pop().toLowerCase();
+
+      if (["pdf"].includes(extension)) {
+        return <FilePdfOutlined />;
+      } else if (["jpg", "jpeg", "png", "gif"].includes(extension)) {
+        return <FileImageOutlined />;
+      }
+    }
+
     return <FileTextOutlined />;
+  };
+
+  // Helper function to get file name from path
+  const getFileName = (filePath) => {
+    if (!filePath) return "Unknown file";
+    return (
+      filePath.split("\\").pop() ||
+      filePath.split("/").pop() ||
+      "Prescription file"
+    );
   };
 
   // Helper function to format date
@@ -538,12 +601,15 @@ const CustomerPage = () => {
                       onClick={() => viewPrescription(prescription)}
                     >
                       <List.Item.Meta
-                        avatar={getFileIcon(prescription.fileUrl)}
-                        title={`Prescription ${prescription._id.substring(
-                          0,
-                          8
-                        )}...`}
-                        description={formatDate(prescription.createdAt)}
+                        avatar={getFileIcon(prescription)}
+                        title={`Prescription ${
+                          prescription._id
+                            ? prescription._id.substring(0, 8) + "..."
+                            : "Unknown"
+                        }`}
+                        description={formatDate(
+                          prescription.uploadDate || prescription.createdAt
+                        )}
                       />
                     </List.Item>
                   )}
@@ -563,28 +629,50 @@ const CustomerPage = () => {
                   <div className="mb-4">
                     <p>
                       <strong>Added on:</strong>{" "}
-                      {formatDate(selectedPrescription.createdAt)}
+                      {formatDate(
+                        selectedPrescription.uploadDate ||
+                          selectedPrescription.createdAt
+                      )}
                     </p>
                     <p>
                       <strong>Prescription ID:</strong>{" "}
-                      {selectedPrescription._id}
+                      {selectedPrescription._id || "Not available"}
                     </p>
+                    {selectedPrescription.status && (
+                      <p>
+                        <strong>Status:</strong>{" "}
+                        <Tag
+                          color={
+                            selectedPrescription.status === "active"
+                              ? "green"
+                              : "orange"
+                          }
+                        >
+                          {selectedPrescription.status}
+                        </Tag>
+                      </p>
+                    )}
+                    {selectedPrescription.file && (
+                      <p>
+                        <strong>Filename:</strong>{" "}
+                        {getFileName(selectedPrescription.file)}
+                      </p>
+                    )}
                   </div>
 
-                  {selectedPrescription.fileUrl && (
-                    <div className="mb-4">
-                      {selectedPrescription.fileUrl.match(
+                  {selectedPrescription.file && (
+                    <div className="mb-4 text-center">
+                      {selectedPrescription.file.match(
                         /\.(jpg|jpeg|png|gif)$/i
                       ) ? (
                         <div className="flex justify-center">
-                          <Image
-                            src={selectedPrescription.fileUrl}
-                            alt="Prescription"
-                            height={300}
-                            className="object-contain"
+                          <img
+                            src="/api/placeholder/400/320"
+                            alt="Prescription preview not available"
+                            className="object-contain h-64"
                           />
                         </div>
-                      ) : selectedPrescription.fileUrl.match(/\.pdf$/i) ? (
+                      ) : selectedPrescription.file.match(/\.pdf$/i) ? (
                         <div className="text-center">
                           <FilePdfOutlined
                             style={{ fontSize: "48px", color: "#ff4d4f" }}
@@ -606,11 +694,13 @@ const CustomerPage = () => {
                     <Button
                       type="primary"
                       icon={<DownloadOutlined />}
-                      href={selectedPrescription.fileUrl}
-                      target="_blank"
+                      onClick={() =>
+                        handleDownloadPrescription(selectedPrescription)
+                      }
+                      loading={downloadLoading}
                       className="bg-blue-600 hover:bg-blue-700"
                     >
-                      Download Prescription
+                      View Prescription
                     </Button>
                   </div>
                 </div>

@@ -58,7 +58,7 @@ const LoginPage = () => {
                   level={2}
                   style={{ color: "#1890ff", marginBottom: "8px" }}
                 >
-                  PharmManager
+                  Audica
                 </Title>
                 <Text type="secondary">Sign in to your account</Text>
               </div>

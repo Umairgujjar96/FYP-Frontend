@@ -31,6 +31,7 @@ import SalesReportPage from "./components/Dashboard/GenerateReport";
 import SalesReportComponent from "./components/Dashboard/GenerateReport";
 import ProfitReportComponent from "./components/Dashboard/ProfitReport";
 import InventoryDashboard from "./components/StoresPages/InventoryPage";
+import PrescriptionViewerPage from "./components/StoresPages/PrescriptonViewerPage";
 // import EnhancedPOS from "./components/POS/POS2";
 // import POSHomePage from "./components/POS/POS2";
 // import PharmacyPOS from "./components/POS/POS2";
@@ -231,6 +232,10 @@ const App = () => {
                         <SubscriptionPage />
                       </ProtectedRoute>
                     }
+                  />
+                  <Route
+                    path="/prescriptions/view/:customerId/:prescriptionId"
+                    element={<PrescriptionViewerPage />}
                   />
                 </Routes>
               </main>

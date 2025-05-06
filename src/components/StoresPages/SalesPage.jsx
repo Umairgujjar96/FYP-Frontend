@@ -132,9 +132,12 @@ const SalesPage = () => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice #${saleData.invoiceNumber || "N/A"}</title>
+  <title>Receipt #${saleData.invoiceNumber || "N/A"}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@400;700&display=swap');
+    @font-face {
+      font-family: 'ReceiptFont';
+      src: url('https://cdnjs.cloudflare.com/ajax/libs/courier-prime/1.0.1/fonts/courier-prime.regular.ttf');
+    }
     
     * {
       margin: 0;
@@ -143,593 +146,264 @@ const SalesPage = () => {
     }
     
     body {
-      font-family: 'Inter', sans-serif;
-      color: #222;
+      font-family: 'ReceiptFont', 'Courier New', monospace;
       background-color: #f5f5f5;
-      line-height: 1.6;
-      padding: 30px;
+      line-height: 1.2;
+      padding: 20px;
+      font-size: 12px;
+      color: #000;
     }
     
-    .container {
-      max-width: 800px;
+    .receipt-container {
+      width: 80mm;
       margin: 0 auto;
       background-color: #fff;
-      border-radius: 8px;
-      box-shadow: 0 5px 25px rgba(0, 0, 0, 0.1);
-      overflow: hidden;
-      border: 1px solid #e0e0e0;
+      padding: 5px 2px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     
-    .invoice-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      padding: 40px;
-      background-color: #222;
-      color: white;
-      position: relative;
-    }
-    
-    .invoice-header::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 40px;
-      right: 40px;
-      height: 3px;
-      background: repeating-linear-gradient(to right, #fff, #fff 8px, transparent 8px, transparent 16px);
-    }
-    
-    .store-name {
-      font-family: 'Merriweather', serif;
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-    }
-    
-    .store-info {
-      font-size: 14px;
-      font-weight: 300;
-      opacity: 0.9;
-    }
-    
-    .invoice-info {
-      text-align: right;
-    }
-    
-    .invoice-title {
-      font-family: 'Merriweather', serif;
-      font-size: 22px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    
-    .invoice-details {
-      font-size: 14px;
-      font-weight: 300;
-      opacity: 0.9;
-    }
-    
-    .invoice-status {
-      display: inline-block;
-      padding: 6px 14px;
-      margin-bottom: 15px;
-      border-radius: 30px;
-      font-weight: 500;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    
-    .status-paid {
-      background-color: #e8f5e9;
-      color: #2e7d32;
-      border: 1px solid #a5d6a7;
-    }
-    
-    .status-pending {
-      background-color: #fff8e1;
-      color: #f57f17;
-      border: 1px solid #ffe082;
-    }
-    
-    .status-failed {
-      background-color: #ffebee;
-      color: #c62828;
-      border: 1px solid #ef9a9a;
-    }
-    
-    .status-unknown {
-      background-color: #f5f5f5;
-      color: #616161;
-      border: 1px solid #e0e0e0;
-    }
-    
-    .invoice-body {
-      padding: 40px;
-    }
-    
-    .section-title {
-      font-family: 'Merriweather', serif;
-      font-size: 18px;
-      font-weight: 600;
-      margin: 30px 0 20px;
-      position: relative;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #222;
-    }
-    
-    .section-title:first-of-type {
-      margin-top: 0;
-    }
-    
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 30px;
-      font-size: 14px;
-    }
-    
-    th {
-      background-color: #f3f3f3;
-      font-weight: 600;
-      text-align: left;
-      padding: 15px;
-      border-bottom: 2px solid #ddd;
-    }
-    
-    td {
-      padding: 15px;
-      border-bottom: 1px solid #eee;
-      vertical-align: top;
-    }
-    
-    tr:last-child td {
-      border-bottom: none;
-    }
-    
-    tr:nth-child(odd) {
-      background-color: #f9f9f9;
+    .text-center {
+      text-align: center;
     }
     
     .text-right {
       text-align: right;
     }
     
-    .summary-container {
-      display: flex;
-      justify-content: flex-end;
+    .bold {
+      font-weight: bold;
     }
     
-    .summary-table {
-      width: 350px;
-      font-size: 14px;
-      border: 2px solid #222;
-      border-radius: 4px;
-      overflow: hidden;
-    }
-    
-    .summary-table td {
-      padding: 12px 20px;
-      border-bottom: 1px solid #eee;
-    }
-    
-    .summary-table tr:last-child td {
-      border-bottom: none;
-    }
-    
-    .summary-table .label {
-      color: #555;
-      font-weight: 500;
-    }
-    
-    .summary-table .value {
-      font-weight: 600;
-      text-align: right;
-    }
-    
-    .total-row td {
-      padding: 18px 20px;
-      font-weight: 700;
-      font-size: 16px;
-      background-color: #222;
-      color: white;
-    }
-    
-    .total-row .label {
-      color: #fff;
-    }
-    
-    .footer {
-      margin-top: 60px;
-      padding-top: 30px;
-      border-top: 1px dashed #ccc;
+    .header {
       text-align: center;
-      font-size: 14px;
-      color: #555;
-    }
-    
-    .footer p {
       margin-bottom: 10px;
+      padding-bottom: 5px;
+      border-bottom: 1px dashed #000;
     }
     
-    .footer strong {
-      color: #333;
+    .store-name {
+      font-size: 16px;
+      font-weight: bold;
+      margin-bottom: 3px;
     }
     
-    .no-print {
-      text-align: right;
-      margin-bottom: 20px;
+    .divider {
+      border-bottom: 1px dashed #000;
+      margin: 5px 0;
     }
     
-    .print-button {
-      padding: 10px 24px;
-      background: #222;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    .double-divider {
+      border-bottom: 4px double #000;
+      margin: 5px 0;
     }
     
-    .print-button:hover {
-      background: #000;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 3px 0;
     }
     
-    .print-button svg {
-      margin-right: 8px;
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 5px 0;
+    }
+    
+    .items-table td {
+      padding: 2px 0;
+      vertical-align: top;
     }
     
     .item-details {
-      font-size: 12px;
-      color: #777;
+      font-size: 10px;
+      color: #444;
+    }
+    
+    .totals {
       margin-top: 5px;
     }
     
-    .product-name {
-      font-weight: 600;
-    }
-    
-    .logo-placeholder {
-      width: 60px;
-      height: 60px;
-      border-radius: 8px;
-      background: rgba(255,255,255,0.2);
-      margin-bottom: 15px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 24px;
-      border: 2px solid rgba(255,255,255,0.5);
-    }
-    
-    .customer-info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 30px;
-      margin-bottom: 30px;
-    }
-    
-    .info-block {
-      background-color: #f9f9f9;
-      border-radius: 4px;
-      padding: 20px;
-      border: 1px solid #eee;
-      position: relative;
-    }
-    
-    .info-block::before {
-      content: '';
-      position: absolute;
-      top: -1px;
-      left: -1px;
-      right: -1px;
-      height: 6px;
-      background-color: #222;
-    }
-    
-    .info-label {
-      font-size: 12px;
-      text-transform: uppercase;
-      color: #777;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
-      font-weight: 600;
-    }
-    
-    .info-value {
-      font-weight: 600;
-      color: #222;
-    }
-
-    .invoice-watermark {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-45deg);
-      font-size: 120px;
-      color: rgba(0,0,0,0.03);
-      font-weight: 900;
-      pointer-events: none;
-      text-transform: uppercase;
-      white-space: nowrap;
-      z-index: 0;
-    }
-    
-    .pharmacy-details {
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 1px dashed #ddd;
+    .total-row {
       display: flex;
       justify-content: space-between;
+      margin: 2px 0;
     }
     
-    .signature-block {
-      width: 200px;
-      margin-top: 20px;
+    .grand-total {
+      font-size: 14px;
+      font-weight: bold;
+      margin: 5px 0;
     }
     
-    .signature-line {
-      height: 1px;
+    .footer {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 10px;
+    }
+    
+    .barcode {
+      text-align: center;
+      margin: 10px 0;
+      font-family: 'Libre Barcode 39', cursive;
+      font-size: 36px;
+    }
+    
+    .print-button {
+      display: block;
+      margin: 20px auto;
+      padding: 10px 20px;
       background: #222;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+    
+    .no-print {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    .signature-area {
+      margin-top: 10px;
       margin-bottom: 5px;
     }
     
-    .signature-label {
-      font-size: 12px;
-      color: #555;
-      text-align: center;
-    }
-    
-    .receipt-barcode {
-      text-align: center;
-      margin-top: 30px;
-      font-size: 10px;
-      color: #777;
-    }
-    
-    .barcode-placeholder {
-      height: 40px;
-      background: repeating-linear-gradient(to right, #000, #000 1px, #fff 1px, #fff 3px);
-      margin: 5px 0;
-      position: relative;
-    }
-    
-    .barcode-placeholder::after {
-      content: '${saleData.invoiceNumber || "N/A"}';
-      position: absolute;
-      bottom: -18px;
-      left: 0;
-      right: 0;
-      text-align: center;
-      font-size: 12px;
-      color: #222;
-      font-weight: 500;
+    .signature-line {
+      border-top: 1px solid #000;
+      width: 80%;
+      margin: 20px auto 2px;
     }
     
     @media print {
-      @page {
-        margin: 10mm;
-        size: A4;
-      }
-      
       body {
         padding: 0;
         background: none;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
       }
       
-      .container {
+      .receipt-container {
         box-shadow: none;
-        border: none;
-        border-radius: 0;
+        width: 76mm;
+        padding: 0;
       }
       
       .no-print {
         display: none;
-      }
-      
-      .invoice-header, .total-row td {
-        background-color: #222 !important;
-        color: white !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      
-      tr:nth-child(odd) {
-        background-color: #f9f9f9 !important;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
       }
     }
   </style>
 </head>
 <body>
   <div class="no-print">
-    <button class="print-button" onclick="window.print();">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="6 9 6 2 18 2 18 9"></polyline>
-        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-        <rect x="6" y="14" width="12" height="8"></rect>
-      </svg>
-      Print Invoice
-    </button>
+    <button class="print-button" onclick="window.print();">Print Receipt</button>
   </div>
   
-  <div class="container">
-    <div class="invoice-watermark">RECEIPT</div>
-    <div class="invoice-header">
-      <div>
-        <div class="logo-placeholder">${
-          saleData.store?.name?.charAt(0) || "P"
-        }</div>
-        <div class="store-name">${saleData.store?.name || "Pharmacy"}</div>
-        <div class="store-info">
-          ${saleData.store?.email ? `${saleData.store.email}<br>` : ""}
-          ${saleData.store?.phoneNumber ? `${saleData.store.phoneNumber}` : ""}
-        </div>
+  <div class="receipt-container">
+    <div class="header">
+      <div class="store-name">${saleData.store?.name || "PHARMACY"}</div>
+      <div>${saleData.store?.email || ""}</div>
+      <div>${saleData.store?.phoneNumber || ""}</div>
+    </div>
+    
+    <div class="text-center bold">SALES RECEIPT</div>
+    <div class="divider"></div>
+    
+    <div class="info-row">
+      <div>RECEIPT#: ${saleData.invoiceNumber || "N/A"}</div>
+      <div>DATE: ${dayjs(saleData.createdAt).format("DD/MM/YYYY")}</div>
+    </div>
+    <div class="info-row">
+      <div>TIME: ${dayjs(saleData.createdAt).format("HH:mm")}</div>
+      <div>STATUS: ${paymentStatus.toUpperCase()}</div>
+    </div>
+    <div class="info-row">
+      <div>CUSTOMER: ${saleData.customer?.name || "Walk-in"}</div>
+    </div>
+    <div class="info-row">
+      <div>PAYMENT: ${paymentMethod.toUpperCase()}</div>
+    </div>
+    <div class="info-row">
+      <div>TRANS ID: ${saleData.payment?.transactionId || "N/A"}</div>
+    </div>
+    
+    <div class="divider"></div>
+    <div class="info-row bold">
+      <div>ITEM</div>
+      <div>QTY</div>
+      <div>PRICE</div>
+      <div>TOTAL</div>
+    </div>
+    <div class="divider"></div>
+    
+    <table class="items-table">
+      <tbody>
+        ${
+          saleData.items && Array.isArray(saleData.items)
+            ? saleData.items
+                .map(
+                  (item) => `
+        <tr>
+          <td width="45%">
+            ${item?.product?.name || "N/A"}
+            <div class="item-details">${item?.product?.genericName || ""}</div>
+            <div class="item-details">BATCH:${
+              item?.batch?.batchNumber || "N/A"
+            }</div>
+          </td>
+          <td width="15%">${item?.quantity || 0}</td>
+          <td width="20%">${(item.unitPrice || 0).toFixed(2)}</td>
+          <td width="20%" class="text-right">${(
+            (item.quantity || 0) * (item.unitPrice || 0) -
+            (item.discount || 0)
+          ).toFixed(2)}</td>
+        </tr>`
+                )
+                .join("")
+            : '<tr><td colspan="4" class="text-center">No items</td></tr>'
+        }
+      </tbody>
+    </table>
+    
+    <div class="double-divider"></div>
+    
+    <div class="totals">
+      <div class="total-row">
+        <div>SUBTOTAL:</div>
+        <div>Rs. ${(saleData.subtotal || 0).toFixed(2)}</div>
       </div>
-      <div class="invoice-info">
-        <div class="invoice-status status-${paymentStatus.toLowerCase()}">
-          ${paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}
-        </div>
-        <div class="invoice-title">Invoice #${
-          saleData.invoiceNumber || "N/A"
-        }</div>
-        <div class="invoice-details">
-          Date: ${dayjs(saleData.createdAt).format("MMMM DD, YYYY")}<br>
-          Time: ${dayjs(saleData.createdAt).format("HH:mm")}
-        </div>
+      <div class="total-row">
+        <div>DISCOUNT:</div>
+        <div>${(saleData.discount || 0).toFixed(2)}%</div>
+      </div>
+      <div class="total-row">
+        <div>TAX:</div>
+        <div>Rs. ${(saleData.tax || 0).toFixed(2)}</div>
+      </div>
+      <div class="double-divider"></div>
+      <div class="total-row grand-total">
+        <div>TOTAL:</div>
+        <div>Rs. ${(saleData.total || 0).toFixed(2)}</div>
       </div>
     </div>
     
-    <div class="invoice-body">
-      <div class="customer-info-grid">
-        <div class="info-block">
-          <div class="info-label">Customer</div>
-          <div class="info-value">${
-            saleData.customer?.name || "Walk-in Customer"
-          }</div>
-          ${
-            saleData.customer?.email
-              ? `<div class="item-details">${saleData.customer.email}</div>`
-              : ""
-          }
-          ${
-            saleData.customer?.phoneNumber
-              ? `<div class="item-details">${saleData.customer.phoneNumber}</div>`
-              : ""
-          }
-        </div>
-        <div class="info-block">
-          <div class="info-label">Payment Details</div>
-          <div class="info-value">${
-            paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
-          }</div>
-          <div class="item-details">Transaction ID: ${
-            saleData.payment?.transactionId || "N/A"
-          }</div>
-        </div>
-      </div>
-      
-      <div class="section-title">Order Items</div>
-      <table>
-        <thead>
-          <tr>
-            <th width="30%">Product</th>
-            <th width="20%">Batch</th>
-            <th width="10%">Quantity</th>
-            <th class="text-right" width="15%">Unit Price</th>
-            <th class="text-right" width="10%">Discount</th>
-            <th class="text-right" width="15%">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${
-            saleData.items && Array.isArray(saleData.items)
-              ? saleData.items
-                  .map(
-                    (item) => `
-          <tr>
-            <td>
-              <div class="product-name">${item?.product?.name || "N/A"}</div>
-              ${
-                item?.product?.genericName
-                  ? `<div class="item-details">Generic: ${item.product.genericName}</div>`
-                  : ""
-              }
-              ${
-                item?.product?.description
-                  ? `<div class="item-details">${item.product.description}</div>`
-                  : ""
-              }
-            </td>
-            <td>
-              ${item?.batch?.batchNumber || "N/A"}
-              ${
-                item?.batch?.expiryDate
-                  ? `<div class="item-details">Exp: ${dayjs(
-                      item.batch.expiryDate
-                    ).format("MMM DD, YYYY")}</div>`
-                  : ""
-              }
-            </td>
-            <td>${item?.quantity || 0}</td>
-            <td class="text-right">Rs. ${(item.unitPrice || 0).toFixed(2)}</td>
-            <td class="text-right">Rs. ${(item.discount || 0).toFixed(2)}</td>
-            <td class="text-right">Rs. ${(
-              (item.quantity || 0) * (item.unitPrice || 0) -
-              (item.discount || 0)
-            ).toFixed(2)}</td>
-          </tr>`
-                  )
-                  .join("")
-              : '<tr><td colspan="6" style="text-align: center;">No items found</td></tr>'
-          }
-        </tbody>
-      </table>
-      
-      <div class="summary-container">
-        <table class="summary-table">
-          <tbody>
-            <tr>
-              <td class="label">Subtotal:</td>
-              <td class="value">Rs. ${(saleData.subtotal || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td class="label">Discount (%):</td>
-              <td class="value">${(saleData.discount || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td class="label">Tax:</td>
-              <td class="value">Rs. ${(saleData.tax || 0).toFixed(2)}</td>
-            </tr>
-            <tr class="total-row">
-              <td class="label">Total:</td>
-              <td class="value">Rs. ${(saleData.total || 0).toFixed(2)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-      <div class="pharmacy-details">
-        <div class="signature-block">
-          <div class="signature-line"></div>
-          <div class="signature-label">Pharmacist Signature</div>
-        </div>
-        <div class="signature-block">
-          <div class="signature-line"></div>
-          <div class="signature-label">Customer Signature</div>
-        </div>
-      </div>
-      
-      <div class="receipt-barcode">
-        <p>Invoice Verification</p>
-        <div class="barcode-placeholder"></div>
-      </div>
-      
-      <div class="footer">
-        <p><strong>Served by:</strong> ${
-          saleData.staffMember?.firstName || ""
-        } ${saleData.staffMember?.lastName || ""}</p>
-        <p>Generated on ${dayjs().format("MMMM DD, YYYY")} at ${dayjs().format(
-          "HH:mm"
-        )}</p>
-        <p>Thank you for choosing ${
-          saleData.store?.name || "our pharmacy"
-        }. We appreciate your business!</p>
-      </div>
+    <div class="divider"></div>
+    
+    <div class="signature-area">
+      <div class="text-center">Pharmacist</div>
+      <div class="signature-line"></div>
+    </div>
+    
+    
+    <div class="footer">
+      <div>SERVED BY: ${saleData.staffMember?.firstName || ""} ${
+          saleData.staffMember?.lastName || ""
+        }</div>
+      <div>PRINTED: ${dayjs().format("DD/MM/YYYY HH:mm")}</div>
+      <div class="divider"></div>
+      <div>THANK YOU FOR YOUR BUSINESS!</div>
+      <div>${saleData.store?.name || "PHARMACY"}</div>
     </div>
   </div>
 </body>
@@ -1604,3 +1278,611 @@ const SalesPage = () => {
 };
 
 export default SalesPage;
+
+// <!DOCTYPE html>
+// <html lang="en">
+// <head>
+//   <meta charset="UTF-8">
+//   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+//   <title>Invoice #${saleData.invoiceNumber || "N/A"}</title>
+//   <style>
+//     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@400;700&display=swap');
+
+//     * {
+//       margin: 0;
+//       padding: 0;
+//       box-sizing: border-box;
+//     }
+
+//     body {
+//       font-family: 'Inter', sans-serif;
+//       color: #222;
+//       background-color: #f5f5f5;
+//       line-height: 1.6;
+//       padding: 30px;
+//     }
+
+//     .container {
+//       max-width: 800px;
+//       margin: 0 auto;
+//       background-color: #fff;
+//       border-radius: 8px;
+//       box-shadow: 0 5px 25px rgba(0, 0, 0, 0.1);
+//       overflow: hidden;
+//       border: 1px solid #e0e0e0;
+//     }
+
+//     .invoice-header {
+//       display: flex;
+//       justify-content: space-between;
+//       align-items: flex-start;
+//       padding: 40px;
+//       background-color: #222;
+//       color: white;
+//       position: relative;
+//     }
+
+//     .invoice-header::after {
+//       content: '';
+//       position: absolute;
+//       bottom: 0;
+//       left: 40px;
+//       right: 40px;
+//       height: 3px;
+//       background: repeating-linear-gradient(to right, #fff, #fff 8px, transparent 8px, transparent 16px);
+//     }
+
+//     .store-name {
+//       font-family: 'Merriweather', serif;
+//       font-size: 28px;
+//       font-weight: 700;
+//       letter-spacing: 0.5px;
+//       margin-bottom: 8px;
+//     }
+
+//     .store-info {
+//       font-size: 14px;
+//       font-weight: 300;
+//       opacity: 0.9;
+//     }
+
+//     .invoice-info {
+//       text-align: right;
+//     }
+
+//     .invoice-title {
+//       font-family: 'Merriweather', serif;
+//       font-size: 22px;
+//       font-weight: 700;
+//       margin-bottom: 8px;
+//     }
+
+//     .invoice-details {
+//       font-size: 14px;
+//       font-weight: 300;
+//       opacity: 0.9;
+//     }
+
+//     .invoice-status {
+//       display: inline-block;
+//       padding: 6px 14px;
+//       margin-bottom: 15px;
+//       border-radius: 30px;
+//       font-weight: 500;
+//       font-size: 12px;
+//       text-transform: uppercase;
+//       letter-spacing: 1px;
+//     }
+
+//     .status-paid {
+//       background-color: #e8f5e9;
+//       color: #2e7d32;
+//       border: 1px solid #a5d6a7;
+//     }
+
+//     .status-pending {
+//       background-color: #fff8e1;
+//       color: #f57f17;
+//       border: 1px solid #ffe082;
+//     }
+
+//     .status-failed {
+//       background-color: #ffebee;
+//       color: #c62828;
+//       border: 1px solid #ef9a9a;
+//     }
+
+//     .status-unknown {
+//       background-color: #f5f5f5;
+//       color: #616161;
+//       border: 1px solid #e0e0e0;
+//     }
+
+//     .invoice-body {
+//       padding: 40px;
+//     }
+
+//     .section-title {
+//       font-family: 'Merriweather', serif;
+//       font-size: 18px;
+//       font-weight: 600;
+//       margin: 30px 0 20px;
+//       position: relative;
+//       padding-bottom: 10px;
+//       border-bottom: 2px solid #222;
+//     }
+
+//     .section-title:first-of-type {
+//       margin-top: 0;
+//     }
+
+//     table {
+//       width: 100%;
+//       border-collapse: collapse;
+//       margin-bottom: 30px;
+//       font-size: 14px;
+//     }
+
+//     th {
+//       background-color: #f3f3f3;
+//       font-weight: 600;
+//       text-align: left;
+//       padding: 15px;
+//       border-bottom: 2px solid #ddd;
+//     }
+
+//     td {
+//       padding: 15px;
+//       border-bottom: 1px solid #eee;
+//       vertical-align: top;
+//     }
+
+//     tr:last-child td {
+//       border-bottom: none;
+//     }
+
+//     tr:nth-child(odd) {
+//       background-color: #f9f9f9;
+//     }
+
+//     .text-right {
+//       text-align: right;
+//     }
+
+//     .summary-container {
+//       display: flex;
+//       justify-content: flex-end;
+//     }
+
+//     .summary-table {
+//       width: 350px;
+//       font-size: 14px;
+//       border: 2px solid #222;
+//       border-radius: 4px;
+//       overflow: hidden;
+//     }
+
+//     .summary-table td {
+//       padding: 12px 20px;
+//       border-bottom: 1px solid #eee;
+//     }
+
+//     .summary-table tr:last-child td {
+//       border-bottom: none;
+//     }
+
+//     .summary-table .label {
+//       color: #555;
+//       font-weight: 500;
+//     }
+
+//     .summary-table .value {
+//       font-weight: 600;
+//       text-align: right;
+//     }
+
+//     .total-row td {
+//       padding: 18px 20px;
+//       font-weight: 700;
+//       font-size: 16px;
+//       background-color: #222;
+//       color: white;
+//     }
+
+//     .total-row .label {
+//       color: #fff;
+//     }
+
+//     .footer {
+//       margin-top: 60px;
+//       padding-top: 30px;
+//       border-top: 1px dashed #ccc;
+//       text-align: center;
+//       font-size: 14px;
+//       color: #555;
+//     }
+
+//     .footer p {
+//       margin-bottom: 10px;
+//     }
+
+//     .footer strong {
+//       color: #333;
+//     }
+
+//     .no-print {
+//       text-align: right;
+//       margin-bottom: 20px;
+//     }
+
+//     .print-button {
+//       padding: 10px 24px;
+//       background: #222;
+//       color: white;
+//       border: none;
+//       border-radius: 6px;
+//       cursor: pointer;
+//       font-size: 14px;
+//       font-weight: 500;
+//       display: inline-flex;
+//       align-items: center;
+//       justify-content: center;
+//       transition: all 0.2s ease;
+//       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+//     }
+
+//     .print-button:hover {
+//       background: #000;
+//       transform: translateY(-2px);
+//       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+//     }
+
+//     .print-button svg {
+//       margin-right: 8px;
+//     }
+
+//     .item-details {
+//       font-size: 12px;
+//       color: #777;
+//       margin-top: 5px;
+//     }
+
+//     .product-name {
+//       font-weight: 600;
+//     }
+
+//     .logo-placeholder {
+//       width: 60px;
+//       height: 60px;
+//       border-radius: 8px;
+//       background: rgba(255,255,255,0.2);
+//       margin-bottom: 15px;
+//       display: flex;
+//       align-items: center;
+//       justify-content: center;
+//       font-weight: 700;
+//       font-size: 24px;
+//       border: 2px solid rgba(255,255,255,0.5);
+//     }
+
+//     .customer-info-grid {
+//       display: grid;
+//       grid-template-columns: 1fr 1fr;
+//       gap: 30px;
+//       margin-bottom: 30px;
+//     }
+
+//     .info-block {
+//       background-color: #f9f9f9;
+//       border-radius: 4px;
+//       padding: 20px;
+//       border: 1px solid #eee;
+//       position: relative;
+//     }
+
+//     .info-block::before {
+//       content: '';
+//       position: absolute;
+//       top: -1px;
+//       left: -1px;
+//       right: -1px;
+//       height: 6px;
+//       background-color: #222;
+//     }
+
+//     .info-label {
+//       font-size: 12px;
+//       text-transform: uppercase;
+//       color: #777;
+//       letter-spacing: 0.5px;
+//       margin-bottom: 8px;
+//       font-weight: 600;
+//     }
+
+//     .info-value {
+//       font-weight: 600;
+//       color: #222;
+//     }
+
+//     .invoice-watermark {
+//       position: absolute;
+//       top: 50%;
+//       left: 50%;
+//       transform: translate(-50%, -50%) rotate(-45deg);
+//       font-size: 120px;
+//       color: rgba(0,0,0,0.03);
+//       font-weight: 900;
+//       pointer-events: none;
+//       text-transform: uppercase;
+//       white-space: nowrap;
+//       z-index: 0;
+//     }
+
+//     .pharmacy-details {
+//       margin-top: 40px;
+//       padding-top: 20px;
+//       border-top: 1px dashed #ddd;
+//       display: flex;
+//       justify-content: space-between;
+//     }
+
+//     .signature-block {
+//       width: 200px;
+//       margin-top: 20px;
+//     }
+
+//     .signature-line {
+//       height: 1px;
+//       background: #222;
+//       margin-bottom: 5px;
+//     }
+
+//     .signature-label {
+//       font-size: 12px;
+//       color: #555;
+//       text-align: center;
+//     }
+
+//     .receipt-barcode {
+//       text-align: center;
+//       margin-top: 30px;
+//       font-size: 10px;
+//       color: #777;
+//     }
+
+//     .barcode-placeholder {
+//       height: 40px;
+//       background: repeating-linear-gradient(to right, #000, #000 1px, #fff 1px, #fff 3px);
+//       margin: 5px 0;
+//       position: relative;
+//     }
+
+//     .barcode-placeholder::after {
+//       content: '${saleData.invoiceNumber || "N/A"}';
+//       position: absolute;
+//       bottom: -18px;
+//       left: 0;
+//       right: 0;
+//       text-align: center;
+//       font-size: 12px;
+//       color: #222;
+//       font-weight: 500;
+//     }
+
+//     @media print {
+//       @page {
+//         margin: 10mm;
+//         size: A4;
+//       }
+
+//       body {
+//         padding: 0;
+//         background: none;
+//         -webkit-print-color-adjust: exact !important;
+//         print-color-adjust: exact !important;
+//       }
+
+//       .container {
+//         box-shadow: none;
+//         border: none;
+//         border-radius: 0;
+//       }
+
+//       .no-print {
+//         display: none;
+//       }
+
+//       .invoice-header, .total-row td {
+//         background-color: #222 !important;
+//         color: white !important;
+//         -webkit-print-color-adjust: exact !important;
+//         print-color-adjust: exact !important;
+//       }
+
+//       tr:nth-child(odd) {
+//         background-color: #f9f9f9 !important;
+//         -webkit-print-color-adjust: exact !important;
+//         print-color-adjust: exact !important;
+//       }
+//     }
+//   </style>
+// </head>
+// <body>
+//   <div class="no-print">
+//     <button class="print-button" onclick="window.print();">
+//       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+//         <polyline points="6 9 6 2 18 2 18 9"></polyline>
+//         <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+//         <rect x="6" y="14" width="12" height="8"></rect>
+//       </svg>
+//       Print Invoice
+//     </button>
+//   </div>
+
+//   <div class="container">
+//     <div class="invoice-watermark">RECEIPT</div>
+//     <div class="invoice-header">
+//       <div>
+//         <div class="logo-placeholder">${
+//           saleData.store?.name?.charAt(0) || "P"
+//         }</div>
+//         <div class="store-name">${saleData.store?.name || "Pharmacy"}</div>
+//         <div class="store-info">
+//           ${saleData.store?.email ? `${saleData.store.email}<br>` : ""}
+//           ${saleData.store?.phoneNumber ? `${saleData.store.phoneNumber}` : ""}
+//         </div>
+//       </div>
+//       <div class="invoice-info">
+//         <div class="invoice-status status-${paymentStatus.toLowerCase()}">
+//           ${paymentStatus.charAt(0).toUpperCase() + paymentStatus.slice(1)}
+//         </div>
+//         <div class="invoice-title">Invoice #${
+//           saleData.invoiceNumber || "N/A"
+//         }</div>
+//         <div class="invoice-details">
+//           Date: ${dayjs(saleData.createdAt).format("MMMM DD, YYYY")}<br>
+//           Time: ${dayjs(saleData.createdAt).format("HH:mm")}
+//         </div>
+//       </div>
+//     </div>
+
+//     <div class="invoice-body">
+//       <div class="customer-info-grid">
+//         <div class="info-block">
+//           <div class="info-label">Customer</div>
+//           <div class="info-value">${
+//             saleData.customer?.name || "Walk-in Customer"
+//           }</div>
+//           ${
+//             saleData.customer?.email
+//               ? `<div class="item-details">${saleData.customer.email}</div>`
+//               : ""
+//           }
+//           ${
+//             saleData.customer?.phoneNumber
+//               ? `<div class="item-details">${saleData.customer.phoneNumber}</div>`
+//               : ""
+//           }
+//         </div>
+//         <div class="info-block">
+//           <div class="info-label">Payment Details</div>
+//           <div class="info-value">${
+//             paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1)
+//           }</div>
+//           <div class="item-details">Transaction ID: ${
+//             saleData.payment?.transactionId || "N/A"
+//           }</div>
+//         </div>
+//       </div>
+
+//       <div class="section-title">Order Items</div>
+//       <table>
+//         <thead>
+//           <tr>
+//             <th width="30%">Product</th>
+//             <th width="20%">Batch</th>
+//             <th width="10%">Quantity</th>
+//             <th class="text-right" width="15%">Unit Price</th>
+//             <th class="text-right" width="10%">Discount</th>
+//             <th class="text-right" width="15%">Amount</th>
+//           </tr>
+//         </thead>
+//         <tbody>
+//           ${
+//             saleData.items && Array.isArray(saleData.items)
+//               ? saleData.items
+//                   .map(
+//                     (item) => `
+//           <tr>
+//             <td>
+//               <div class="product-name">${item?.product?.name || "N/A"}</div>
+//               ${
+//                 item?.product?.genericName
+//                   ? `<div class="item-details">Generic: ${item.product.genericName}</div>`
+//                   : ""
+//               }
+//               ${
+//                 item?.product?.description
+//                   ? `<div class="item-details">${item.product.description}</div>`
+//                   : ""
+//               }
+//             </td>
+//             <td>
+//               ${item?.batch?.batchNumber || "N/A"}
+//               ${
+//                 item?.batch?.expiryDate
+//                   ? `<div class="item-details">Exp: ${dayjs(
+//                       item.batch.expiryDate
+//                     ).format("MMM DD, YYYY")}</div>`
+//                   : ""
+//               }
+//             </td>
+//             <td>${item?.quantity || 0}</td>
+//             <td class="text-right">Rs. ${(item.unitPrice || 0).toFixed(2)}</td>
+//             <td class="text-right">Rs. ${(item.discount || 0).toFixed(2)}</td>
+//             <td class="text-right">Rs. ${(
+//               (item.quantity || 0) * (item.unitPrice || 0) -
+//               (item.discount || 0)
+//             ).toFixed(2)}</td>
+//           </tr>`
+//                   )
+//                   .join("")
+//               : '<tr><td colspan="6" style="text-align: center;">No items found</td></tr>'
+//           }
+//         </tbody>
+//       </table>
+
+//       <div class="summary-container">
+//         <table class="summary-table">
+//           <tbody>
+//             <tr>
+//               <td class="label">Subtotal:</td>
+//               <td class="value">Rs. ${(saleData.subtotal || 0).toFixed(2)}</td>
+//             </tr>
+//             <tr>
+//               <td class="label">Discount (%):</td>
+//               <td class="value">${(saleData.discount || 0).toFixed(2)}</td>
+//             </tr>
+//             <tr>
+//               <td class="label">Tax:</td>
+//               <td class="value">Rs. ${(saleData.tax || 0).toFixed(2)}</td>
+//             </tr>
+//             <tr class="total-row">
+//               <td class="label">Total:</td>
+//               <td class="value">Rs. ${(saleData.total || 0).toFixed(2)}</td>
+//             </tr>
+//           </tbody>
+//         </table>
+//       </div>
+
+//       <div class="pharmacy-details">
+//         <div class="signature-block">
+//           <div class="signature-line"></div>
+//           <div class="signature-label">Pharmacist Signature</div>
+//         </div>
+//         <div class="signature-block">
+//           <div class="signature-line"></div>
+//           <div class="signature-label">Customer Signature</div>
+//         </div>
+//       </div>
+
+//       <div class="receipt-barcode">
+//         <p>Invoice Verification</p>
+//         <div class="barcode-placeholder"></div>
+//       </div>
+
+//       <div class="footer">
+//         <p><strong>Served by:</strong> ${
+//           saleData.staffMember?.firstName || ""
+//         } ${saleData.staffMember?.lastName || ""}</p>
+//         <p>Generated on ${dayjs().format("MMMM DD, YYYY")} at ${dayjs().format(
+//           "HH:mm"
+//         )}</p>
+//         <p>Thank you for choosing ${
+//           saleData.store?.name || "our pharmacy"
+//         }. We appreciate your business!</p>
+//       </div>
+//     </div>
+//   </div>
+// </body>
+// </html>

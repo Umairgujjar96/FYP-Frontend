@@ -82,6 +82,13 @@ export const useAuthStore = create(
             throw new Error(data.message || "Registration failed");
           set({ user: null, token: null });
           set({ isLoading: false });
+
+          localStorage.removeItem("supplier-store");
+          localStorage.removeItem("store-storage");
+          localStorage.removeItem("inventory-storage");
+          localStorage.removeItem("category-storage");
+          localStorage.removeItem("cart-storage");
+          localStorage.removeItem("auth-storage");
           return data;
         } catch (error) {
           set({ error: error.message, isLoading: false });
@@ -136,8 +143,9 @@ export const useStoreStore = create(
         set({ isLoading: true, error: null });
         try {
           const token = useAuthStore.getState().token;
-
-          const response = await fetch(`${BaseUrl}api/store`, {
+          const user = useAuthStore.getState().user;
+          console.log(user);
+          const response = await fetch(`${BaseUrl}api/store/owner/${user.id}`, {
             headers: { Authorization: `Bearer ${token}` },
           });
 
@@ -151,13 +159,17 @@ export const useStoreStore = create(
           if (!response.ok)
             throw new Error(data.message || "Failed to fetch stores");
 
-          set({ stores: data, isLoading: false });
+          set({
+            stores: data.data,
+            currentStore: data.data[0],
+            isLoading: false,
+          });
 
           // If there's no current store but stores exist, set the first one as current
-          if (!get().currentStore && data.length > 0) {
-            set({ currentStore: data[0] });
-            console.log(data[0]);
-          }
+          // if (!get().currentStore && data.length > 0) {
+          //   set({ currentStore: data[0] });
+          //   console.log(data[0]);
+          // }
           // const thisStore = useStoreStore.getState().currentStore;
           // console.log(thisStore);
           return data;
@@ -215,6 +227,7 @@ export const useStoreStore = create(
 
       setCurrentStore: (storeId) => {
         const store = get().stores.find((s) => s._id === storeId);
+        console.log(store);
         if (store) {
           set({ currentStore: store });
         }

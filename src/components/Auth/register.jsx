@@ -115,7 +115,7 @@ const RegisterPage = () => {
                   level={2}
                   style={{ color: "#1890ff", marginBottom: "8px" }}
                 >
-                  PharmManager
+                  Welcome to Audica
                 </Title>
                 <Title level={4} style={{ marginBottom: "8px" }}>
                   Create Your Account

@@ -20,7 +20,8 @@ const { Title, Text } = Typography;
 
 const VoiceReceiptModal = ({ visible, onClose, saleData, invoiceNumber }) => {
   if (!saleData) return null;
-
+  console.log(saleData);
+  console.log(invoiceNumber);
   // Helper function to format date
   const formatDate = (date) => {
     return new Date(date).toLocaleString();

@@ -9,21 +9,15 @@ import {
   InputNumber,
   Select,
   Switch,
-  Upload,
   message,
   Divider,
   Spin,
   Row,
   Col,
 } from "antd";
-import {
-  PlusOutlined,
-  InboxOutlined,
-  SaveOutlined,
-  CloseOutlined,
-} from "@ant-design/icons";
+import { SaveOutlined, CloseOutlined } from "@ant-design/icons";
 import axios from "axios";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import dayjs from "dayjs";
 import { useAuthStore } from "../../Store/stores";
 import { useSupplierStore } from "../../Store/useSupplierStore";
@@ -32,27 +26,45 @@ import { useProductStore } from "../../Store/productStore";
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
-const { Dragger } = Upload;
 
 // Hardcoded list of manufacturers
 const MANUFACTURERS = [
-  "Sun Pharmaceutical",
-  "Cipla",
-  "Dr. Reddy's Laboratories",
-  "Lupin Limited",
-  "Aurobindo Pharma",
-  "Cadila Healthcare",
-  "Torrent Pharmaceuticals",
-  "Glenmark Pharmaceuticals",
-  "Alkem Laboratories",
-  "Mankind Pharma",
-  "Intas Pharmaceuticals",
-  "Abbott India",
-  "GlaxoSmithKline",
-  "Pfizer",
-  "Johnson & Johnson",
-  "Novartis",
-  "Sanofi",
+  // Multinational Companies in Pakistan
+  "GSK Pakistan",
+  "Pfizer Pakistan",
+  "Abbott Laboratories Pakistan",
+  "Sanofi Aventis Pakistan",
+  "Novartis Pharma Pakistan",
+  "Otsuka Pakistan",
+
+  // Leading Local Pharmaceutical Companies
+  "Martin Dow",
+  "Getz Pharma",
+  "The Searle Company Ltd",
+  "Highnoon Laboratories",
+  "Pharmevo",
+  "Ferozsons Laboratories",
+  "Hilton Pharma",
+  "AGP Limited",
+  "Citi Pharma",
+  "Sami Pharmaceuticals",
+  "Bosch Pharmaceuticals",
+  "Barrett Hodgson Pakistan",
+  "Brookes Pharma",
+  "Platinum Pharmaceuticals",
+  "Tabros Pharma",
+  "Efroze Chemical Industries",
+  "Werrick Pharmaceuticals",
+  "Zafa Pharmaceuticals",
+  "Medisave Pvt Ltd",
+  "Macter International",
+  "Crown Pharmaceuticals",
+
+  // Herbal & Traditional Medicine Companies
+  "Hamdard Pakistan",
+  "Qarshi Industries",
+
+  // Other
   "Other",
 ];
 
@@ -60,7 +72,6 @@ const ProductPage = () => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [fetchingProduct, setFetchingProduct] = useState(false);
-  const [imageUrl, setImageUrl] = useState("");
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const productId = searchParams.get("productId"); // Extract productId from query string
@@ -95,11 +106,6 @@ const ProductPage = () => {
           productData.batches && productData.batches.length > 0
             ? productData.batches[0]
             : null;
-
-        // Set image URL if available
-        if (productData.image) {
-          setImageUrl(productData.image);
-        }
 
         // Prepare form data from product and the latest batch
         const formData = {
@@ -152,7 +158,6 @@ const ProductPage = () => {
       ...values,
       manufacturingDate: values.manufacturingDate?.format("YYYY-MM-DD"),
       expiryDate: values.expiryDate?.format("YYYY-MM-DD"),
-      image: imageUrl,
     };
 
     try {
@@ -206,26 +211,6 @@ const ProductPage = () => {
     }
   };
 
-  const uploadProps = {
-    name: "file",
-    multiple: false,
-    maxCount: 1,
-    action: "/api/upload", // Replace with your upload endpoint
-    onChange(info) {
-      const { status, response } = info.file;
-
-      if (status === "done") {
-        setImageUrl(response.url);
-        message.success(`${info.file.name} file uploaded successfully.`);
-      } else if (status === "error") {
-        message.error(`${info.file.name} file upload failed.`);
-      }
-    },
-    onRemove() {
-      setImageUrl("");
-    },
-  };
-
   return (
     <div className="w-full max-w-6xl mx-auto p-4 md:p-6">
       <Card className="shadow-md rounded-lg" bordered={false}>
@@ -255,432 +240,376 @@ const ProductPage = () => {
             }}
             className="mt-4"
           >
-            <Row gutter={24}>
-              <Col xs={24} lg={16}>
-                <Card
-                  title={<Title level={4}>Product Information</Title>}
-                  className="mb-6"
-                  bordered={false}
-                  headStyle={{
-                    borderBottom: "1px solid #f0f0f0",
-                    paddingLeft: 0,
-                  }}
-                  bodyStyle={{ paddingLeft: 0, paddingRight: 0 }}
-                >
-                  <Row gutter={16}>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="name"
-                        label="Product Name"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Product name is required",
-                          },
-                        ]}
-                      >
-                        <Input placeholder="Enter product name" />
-                      </Form.Item>
-                    </Col>
+            <Card
+              title={<Title level={4}>Product Information</Title>}
+              className="mb-6"
+              bordered={false}
+              headStyle={{
+                borderBottom: "1px solid #f0f0f0",
+                paddingLeft: 0,
+              }}
+              bodyStyle={{ paddingLeft: 0, paddingRight: 0 }}
+            >
+              <Row gutter={16}>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="name"
+                    label="Product Name"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Product name is required",
+                      },
+                    ]}
+                  >
+                    <Input placeholder="Enter product name" />
+                  </Form.Item>
+                </Col>
 
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="genericName"
-                        label="Generic Name"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Generic name is required",
-                          },
-                        ]}
-                      >
-                        <Input placeholder="Enter generic name" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="genericName"
+                    label="Generic Name"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Generic name is required",
+                      },
+                    ]}
+                  >
+                    <Input placeholder="Enter generic name" />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-                  <Form.Item name="description" label="Description">
-                    <TextArea
-                      placeholder="Enter product description"
-                      rows={3}
+              <Form.Item name="description" label="Description">
+                <TextArea placeholder="Enter product description" rows={3} />
+              </Form.Item>
+
+              <Row gutter={16}>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="manufacturer"
+                    label="Manufacturer"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Manufacturer is required",
+                      },
+                    ]}
+                  >
+                    <Select placeholder="Select manufacturer">
+                      {MANUFACTURERS.map((manufacturer) => (
+                        <Option key={manufacturer} value={manufacturer}>
+                          {manufacturer}
+                        </Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} md={12}>
+                  <Form.Item name="barcode" label="Barcode">
+                    <Input placeholder="Enter barcode" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col xs={24} md={8}>
+                  <Form.Item
+                    name="dosageForm"
+                    label="Dosage Form"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Dosage form is required",
+                      },
+                    ]}
+                  >
+                    <Select placeholder="Select dosage form">
+                      <Option value="tablet">Tablet</Option>
+                      <Option value="capsule">Capsule</Option>
+                      <Option value="syrup">Syrup</Option>
+                      <Option value="injection">Injection</Option>
+                      <Option value="cream">Cream</Option>
+                      <Option value="ointment">Ointment</Option>
+                      <Option value="other">Other</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} md={8}>
+                  <Form.Item
+                    name="strength"
+                    label="Strength"
+                    rules={[
+                      { required: true, message: "Strength is required" },
+                    ]}
+                  >
+                    <Input placeholder="e.g. 500mg, 10ml" />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} md={8}>
+                  <Form.Item
+                    name="category"
+                    label="Category"
+                    rules={[
+                      {
+                        required: false,
+                        message: "Please select a category",
+                      },
+                    ]}
+                  >
+                    <Select
+                      placeholder="Select category"
+                      showSearch
+                      optionFilterProp="children"
+                      allowClear
+                    >
+                      {categories?.map((category) => (
+                        <Select.Option key={category._id} value={category._id}>
+                          {category.name}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="minStockLevel"
+                    label="Minimum Stock Level"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Minimum stock level is required",
+                      },
+                    ]}
+                  >
+                    <InputNumber
+                      placeholder="Enter minimum stock"
+                      min={0}
+                      className="w-full"
                     />
                   </Form.Item>
+                </Col>
 
-                  <Row gutter={16}>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="manufacturer"
-                        label="Manufacturer"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Manufacturer is required",
-                          },
-                        ]}
-                      >
-                        <Select placeholder="Select manufacturer">
-                          {MANUFACTURERS.map((manufacturer) => (
-                            <Option key={manufacturer} value={manufacturer}>
-                              {manufacturer}
-                            </Option>
-                          ))}
-                        </Select>
-                      </Form.Item>
-                    </Col>
-
-                    <Col xs={24} md={12}>
-                      <Form.Item name="barcode" label="Barcode">
-                        <Input placeholder="Enter barcode" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-
-                  <Row gutter={16}>
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        name="dosageForm"
-                        label="Dosage Form"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Dosage form is required",
-                          },
-                        ]}
-                      >
-                        <Select placeholder="Select dosage form">
-                          <Option value="tablet">Tablet</Option>
-                          <Option value="capsule">Capsule</Option>
-                          <Option value="syrup">Syrup</Option>
-                          <Option value="injection">Injection</Option>
-                          <Option value="cream">Cream</Option>
-                          <Option value="ointment">Ointment</Option>
-                          <Option value="other">Other</Option>
-                        </Select>
-                      </Form.Item>
-                    </Col>
-
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        name="strength"
-                        label="Strength"
-                        rules={[
-                          { required: true, message: "Strength is required" },
-                        ]}
-                      >
-                        <Input placeholder="e.g. 500mg, 10ml" />
-                      </Form.Item>
-                    </Col>
-
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        name="category"
-                        label="Category"
-                        rules={[
-                          {
-                            required: false,
-                            message: "Please select a category",
-                          },
-                        ]}
-                      >
-                        <Select
-                          placeholder="Select category"
-                          showSearch
-                          optionFilterProp="children"
-                          allowClear
-                        >
-                          {categories?.map((category) => (
-                            <Select.Option
-                              key={category._id}
-                              value={category._id}
-                            >
-                              {category.name}
-                            </Select.Option>
-                          ))}
-                        </Select>
-                      </Form.Item>
-                    </Col>
-                  </Row>
-
-                  <Row gutter={16}>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="minStockLevel"
-                        label="Minimum Stock Level"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Minimum stock level is required",
-                          },
-                        ]}
-                      >
-                        <InputNumber
-                          placeholder="Enter minimum stock"
-                          min={0}
-                          className="w-full"
-                        />
-                      </Form.Item>
-                    </Col>
-
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="requiresPrescription"
-                        label="Requires Prescription"
-                        valuePropName="checked"
-                      >
-                        <Switch />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                </Card>
-
-                <Card
-                  title={
-                    <Title level={4}>
-                      {isEditMode
-                        ? "New Batch Information"
-                        : "Batch Information"}
-                    </Title>
-                  }
-                  bordered={false}
-                  headStyle={{
-                    borderBottom: "1px solid #f0f0f0",
-                    paddingLeft: 0,
-                  }}
-                  bodyStyle={{ paddingLeft: 0, paddingRight: 0 }}
-                >
-                  {isEditMode && (
-                    <div className="mb-4 px-1">
-                      <Text type="secondary">
-                        {`Current Total Stock: ${
-                          form.getFieldValue("currentStock") || "0"
-                        } units. Adding a new batch will increase the total stock.`}
-                      </Text>
-                    </div>
-                  )}
-
-                  <Row gutter={16}>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="batchNumber"
-                        label="Batch Number"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Batch number is required",
-                          },
-                        ]}
-                      >
-                        <Input placeholder="Enter batch number" />
-                      </Form.Item>
-                    </Col>
-
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="supplier"
-                        label="Supplier"
-                        rules={[
-                          {
-                            required: false,
-                            message: "Please select a supplier",
-                          },
-                        ]}
-                      >
-                        <Select
-                          placeholder="Select supplier"
-                          showSearch
-                          optionFilterProp="children"
-                          allowClear
-                        >
-                          {suppliers && suppliers.length > 0 ? (
-                            suppliers.map((supplier) => (
-                              <Option key={supplier._id} value={supplier._id}>
-                                {supplier.name}
-                              </Option>
-                            ))
-                          ) : (
-                            <Option value="default">Default Supplier</Option>
-                          )}
-                        </Select>
-                      </Form.Item>
-                    </Col>
-                  </Row>
-
-                  <Row gutter={16}>
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="manufacturingDate"
-                        label="Manufacturing Date"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Manufacturing date is required",
-                          },
-                        ]}
-                      >
-                        <DatePicker
-                          className="w-full"
-                          format="YYYY-MM-DD"
-                          disabledDate={(d) => !d || d.isAfter(dayjs())}
-                        />
-                      </Form.Item>
-                    </Col>
-
-                    <Col xs={24} md={12}>
-                      <Form.Item
-                        name="expiryDate"
-                        label="Expiry Date"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Expiry date is required",
-                          },
-                          ({ getFieldValue }) => ({
-                            validator(_, value) {
-                              const manufDate =
-                                getFieldValue("manufacturingDate");
-                              if (
-                                !value ||
-                                !manufDate ||
-                                value.isAfter(manufDate)
-                              ) {
-                                return Promise.resolve();
-                              }
-                              return Promise.reject(
-                                new Error(
-                                  "Expiry date must be after manufacturing date"
-                                )
-                              );
-                            },
-                          }),
-                        ]}
-                      >
-                        <DatePicker className="w-full" format="YYYY-MM-DD" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-
-                  <Row gutter={16}>
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        name="costPrice"
-                        label="Cost Price"
-                        rules={[
-                          { required: true, message: "Cost price is required" },
-                        ]}
-                      >
-                        <InputNumber
-                          placeholder="Enter cost price"
-                          min={0}
-                          step={0.01}
-                          className="w-full"
-                          prefix="Rs. "
-                        />
-                      </Form.Item>
-                    </Col>
-
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        name="sellingPrice"
-                        label="Selling Price"
-                        rules={[
-                          {
-                            required: true,
-                            message: "Selling price is required",
-                          },
-                          ({ getFieldValue }) => ({
-                            validator(_, value) {
-                              const costPrice = getFieldValue("costPrice");
-                              if (!value || !costPrice || value >= costPrice) {
-                                return Promise.resolve();
-                              }
-                              return Promise.reject(
-                                new Error(
-                                  "Selling price should be at least equal to cost price"
-                                )
-                              );
-                            },
-                          }),
-                        ]}
-                      >
-                        <InputNumber
-                          placeholder="Enter selling price"
-                          min={0}
-                          step={0.01}
-                          className="w-full"
-                          prefix="Rs. "
-                        />
-                      </Form.Item>
-                    </Col>
-
-                    <Col xs={24} md={8}>
-                      <Form.Item
-                        name="currentStock"
-                        label={
-                          isEditMode
-                            ? "New Batch Quantity"
-                            : "Initial Stock Quantity"
-                        }
-                        rules={[
-                          {
-                            required: true,
-                            message: "Stock quantity is required",
-                          },
-                        ]}
-                      >
-                        <InputNumber
-                          placeholder="Enter quantity"
-                          min={1}
-                          className="w-full"
-                        />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                </Card>
-              </Col>
-
-              <Col xs={24} lg={8}>
-                <Card
-                  title={<Title level={4}>Product Image</Title>}
-                  bordered={false}
-                  className="mb-6 h-full"
-                  headStyle={{ borderBottom: "1px solid #f0f0f0" }}
-                >
-                  {/* <Form.Item
-                    name="image"
-                    valuePropName="fileList"
-                    getValueFromEvent={(e) => {
-                      if (Array.isArray(e)) {
-                        return e;
-                      }
-                      return e && e.fileList;
-                    }}
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="requiresPrescription"
+                    label="Requires Prescription"
+                    valuePropName="checked"
                   >
-                    <Dragger {...uploadProps} className="h-64">
-                      <p className="ant-upload-drag-icon">
-                        <InboxOutlined />
-                      </p>
-                      <p className="ant-upload-text">
-                        Click or drag file to this area to upload
-                      </p>
-                      <p className="ant-upload-hint">
-                        Support for a single image upload. Please upload a clear
-                        image of the product.
-                      </p>
-                    </Dragger>
-                  </Form.Item> */}
+                    <Switch />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Card>
 
-                  {imageUrl && (
-                    <div className="mt-4">
-                      <img
-                        src={imageUrl}
-                        alt="Product preview"
-                        className="max-w-full h-auto rounded-md"
-                      />
-                    </div>
-                  )}
-                </Card>
-              </Col>
-            </Row>
+            <Card
+              title={
+                <Title level={4}>
+                  {isEditMode ? "New Batch Information" : "Batch Information"}
+                </Title>
+              }
+              bordered={false}
+              headStyle={{
+                borderBottom: "1px solid #f0f0f0",
+                paddingLeft: 0,
+              }}
+              bodyStyle={{ paddingLeft: 0, paddingRight: 0 }}
+            >
+              {isEditMode && (
+                <div className="mb-4 px-1">
+                  <Text type="secondary">
+                    {`Current Total Stock: ${
+                      form.getFieldValue("currentStock") || "0"
+                    } units. Adding a new batch will increase the total stock.`}
+                  </Text>
+                </div>
+              )}
+
+              <Row gutter={16}>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="batchNumber"
+                    label="Batch Number"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Batch number is required",
+                      },
+                    ]}
+                  >
+                    <Input placeholder="Enter batch number" />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="supplier"
+                    label="Supplier"
+                    rules={[
+                      {
+                        required: false,
+                        message: "Please select a supplier",
+                      },
+                    ]}
+                  >
+                    <Select
+                      placeholder="Select supplier"
+                      showSearch
+                      optionFilterProp="children"
+                      allowClear
+                    >
+                      {suppliers && suppliers.length > 0 ? (
+                        suppliers.map((supplier) => (
+                          <Option key={supplier._id} value={supplier._id}>
+                            {supplier.name}
+                          </Option>
+                        ))
+                      ) : (
+                        <Option value="default">Default Supplier</Option>
+                      )}
+                    </Select>
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="manufacturingDate"
+                    label="Manufacturing Date"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Manufacturing date is required",
+                      },
+                    ]}
+                  >
+                    <DatePicker
+                      className="w-full"
+                      format="YYYY-MM-DD"
+                      disabledDate={(d) => !d || d.isAfter(dayjs())}
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} md={12}>
+                  <Form.Item
+                    name="expiryDate"
+                    label="Expiry Date"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Expiry date is required",
+                      },
+                      ({ getFieldValue }) => ({
+                        validator(_, value) {
+                          const manufDate = getFieldValue("manufacturingDate");
+                          if (
+                            !value ||
+                            !manufDate ||
+                            value.isAfter(manufDate)
+                          ) {
+                            return Promise.resolve();
+                          }
+                          return Promise.reject(
+                            new Error(
+                              "Expiry date must be after manufacturing date"
+                            )
+                          );
+                        },
+                      }),
+                    ]}
+                  >
+                    <DatePicker className="w-full" format="YYYY-MM-DD" />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Row gutter={16}>
+                <Col xs={24} md={8}>
+                  <Form.Item
+                    name="costPrice"
+                    label="Cost Price"
+                    rules={[
+                      { required: true, message: "Cost price is required" },
+                    ]}
+                  >
+                    <InputNumber
+                      placeholder="Enter cost price"
+                      min={0}
+                      step={0.01}
+                      className="w-full"
+                      prefix="Rs. "
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} md={8}>
+                  <Form.Item
+                    name="sellingPrice"
+                    label="Selling Price"
+                    rules={[
+                      {
+                        required: true,
+                        message: "Selling price is required",
+                      },
+                      ({ getFieldValue }) => ({
+                        validator(_, value) {
+                          const costPrice = getFieldValue("costPrice");
+                          if (!value || !costPrice || value >= costPrice) {
+                            return Promise.resolve();
+                          }
+                          return Promise.reject(
+                            new Error(
+                              "Selling price should be at least equal to cost price"
+                            )
+                          );
+                        },
+                      }),
+                    ]}
+                  >
+                    <InputNumber
+                      placeholder="Enter selling price"
+                      min={0}
+                      step={0.01}
+                      className="w-full"
+                      prefix="Rs. "
+                    />
+                  </Form.Item>
+                </Col>
+
+                <Col xs={24} md={8}>
+                  <Form.Item
+                    name="currentStock"
+                    label={
+                      isEditMode
+                        ? "New Batch Quantity"
+                        : "Initial Stock Quantity"
+                    }
+                    rules={[
+                      {
+                        required: true,
+                        message: "Stock quantity is required",
+                      },
+                    ]}
+                  >
+                    <InputNumber
+                      placeholder="Enter quantity"
+                      min={1}
+                      className="w-full"
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </Card>
 
             <Divider />
 

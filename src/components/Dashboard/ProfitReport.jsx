@@ -152,14 +152,14 @@ const ProfitReportComponent = ({ stores = [] }) => {
         title: "Revenue",
         dataIndex: "revenue",
         key: "revenue",
-        render: (value) => `$${value.toFixed(2)}`,
+        render: (value) => `Rs. ${value.toFixed(2)}`,
         sorter: (a, b) => a.revenue - b.revenue,
       },
       {
         title: "Cost",
         dataIndex: "cost",
         key: "cost",
-        render: (value) => `$${value.toFixed(2)}`,
+        render: (value) => `Rs.${value.toFixed(2)}`,
         sorter: (a, b) => a.cost - b.cost,
       },
       {
@@ -168,7 +168,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
         key: "profit",
         render: (value) => (
           <span className={value >= 0 ? "text-green-600" : "text-red-600"}>
-            ${value.toFixed(2)}
+            Rs.{value.toFixed(2)}
           </span>
         ),
         sorter: (a, b) => a.profit - b.profit,
@@ -249,14 +249,14 @@ const ProfitReportComponent = ({ stores = [] }) => {
         title: "Revenue",
         dataIndex: "revenue",
         key: "revenue",
-        render: (value) => `$${value.toFixed(2)}`,
+        render: (value) => `Rs.${value.toFixed(2)}`,
         sorter: (a, b) => a.revenue - b.revenue,
       },
       {
         title: "Cost",
         dataIndex: "cost",
         key: "cost",
-        render: (value) => `$${value.toFixed(2)}`,
+        render: (value) => `Rs.${value.toFixed(2)}`,
         sorter: (a, b) => a.cost - b.cost,
       },
       {
@@ -265,7 +265,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
         key: "profit",
         render: (value) => (
           <span className={value >= 0 ? "text-green-600" : "text-red-600"}>
-            ${value.toFixed(2)}
+            Rs.{value.toFixed(2)}
           </span>
         ),
         sorter: (a, b) => a.profit - b.profit,
@@ -312,7 +312,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
         title: "Revenue",
         dataIndex: "revenue",
         key: "revenue",
-        render: (value) => `$${value.toFixed(2)}`,
+        render: (value) => `Rs.${value.toFixed(2)}`,
         sorter: (a, b) => a.revenue - b.revenue,
       },
       {
@@ -321,7 +321,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
         key: "profit",
         render: (value) => (
           <span className={value >= 0 ? "text-green-600" : "text-red-600"}>
-            ${value.toFixed(2)}
+            Rs.{value.toFixed(2)}
           </span>
         ),
         sorter: (a, b) => a.profit - b.profit,
@@ -382,7 +382,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
       seriesField: "category",
       yAxis: {
         label: {
-          formatter: (v) => `$${v}`,
+          formatter: (v) => `Rs.${v}`,
         },
       },
       legend: {
@@ -454,7 +454,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
       legend: false,
       meta: {
         profit: {
-          formatter: (v) => `$${v.toFixed(2)}`,
+          formatter: (v) => `Rs.${v.toFixed(2)}`,
         },
       },
       yAxis: {
@@ -466,7 +466,10 @@ const ProfitReportComponent = ({ stores = [] }) => {
       },
       tooltip: {
         formatter: (datum) => {
-          return { name: datum.product, value: `$${datum.profit.toFixed(2)}` };
+          return {
+            name: datum.product,
+            value: `Rs,${datum.profit.toFixed(2)}`,
+          };
         },
       },
       barStyle: {
@@ -514,7 +517,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
         formatter: (datum) => {
           return {
             name: datum.type,
-            value: `$${datum.value.toFixed(2)} (${datum.percentage.toFixed(
+            value: `Rs.${datum.value.toFixed(2)} (${datum.percentage.toFixed(
               2
             )}%)`,
           };
@@ -841,12 +844,12 @@ const ProfitReportComponent = ({ stores = [] }) => {
                           </Table.Summary.Cell>
                           <Table.Summary.Cell index={2}>
                             <strong>
-                              ${report.summary.totalRevenue.toFixed(2)}
+                              Rs.{report.summary.totalRevenue.toFixed(2)}
                             </strong>
                           </Table.Summary.Cell>
                           <Table.Summary.Cell index={3}>
                             <strong>
-                              ${report.summary.totalCost.toFixed(2)}
+                              Rs.{report.summary.totalCost.toFixed(2)}
                             </strong>
                           </Table.Summary.Cell>
                           <Table.Summary.Cell index={4}>
@@ -857,12 +860,12 @@ const ProfitReportComponent = ({ stores = [] }) => {
                                   : "text-red-600"
                               }
                             >
-                              ${report.summary.totalProfit.toFixed(2)}
+                              Rs.{report.summary.totalProfit.toFixed(2)}
                             </strong>
                           </Table.Summary.Cell>
                           <Table.Summary.Cell index={5}>
                             <strong>
-                              {report.summary.grossProfitMargin.toFixed(2)}%
+                              {report?.summary?.grossProfitMargin?.toFixed(2)}%
                             </strong>
                           </Table.Summary.Cell>
                           <Table.Summary.Cell index={6}>
@@ -937,13 +940,13 @@ const ProfitReportComponent = ({ stores = [] }) => {
                                 title: "Purchase Price",
                                 dataIndex: "purchasePrice",
                                 key: "purchasePrice",
-                                render: (value) => `$${value.toFixed(2)}`,
+                                render: (value) => `Rs.${value.toFixed(2)}`,
                               },
                               {
                                 title: "Selling Price",
                                 dataIndex: "sellingPrice",
                                 key: "sellingPrice",
-                                render: (value) => `$${value.toFixed(2)}`,
+                                render: (value) => `Rs.${value.toFixed(2)}`,
                               },
                               {
                                 title: "Quantity",
@@ -964,13 +967,13 @@ const ProfitReportComponent = ({ stores = [] }) => {
                                 title: "Revenue",
                                 dataIndex: "revenue",
                                 key: "revenue",
-                                render: (value) => `$${value.toFixed(2)}`,
+                                render: (value) => `Rs.${value.toFixed(2)}`,
                               },
                               {
                                 title: "Cost",
                                 dataIndex: "cost",
                                 key: "cost",
-                                render: (value) => `$${value.toFixed(2)}`,
+                                render: (value) => `Rs.${value.toFixed(2)}`,
                               },
                               {
                                 title: "Profit",
@@ -984,7 +987,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
                                         : "text-red-600"
                                     }
                                   >
-                                    ${value.toFixed(2)}
+                                    Rs.{value.toFixed(2)}
                                   </span>
                                 ),
                               },
@@ -1063,11 +1066,11 @@ const ProfitReportComponent = ({ stores = [] }) => {
                     <Title level={5}>Financial Summary</Title>
                     <ul className="list-disc pl-5 space-y-2">
                       <li>
-                        <Text strong>Total Revenue:</Text> $
+                        <Text strong>Total Revenue:</Text> Rs.
                         {report.summary.totalRevenue.toFixed(2)}
                       </li>
                       <li>
-                        <Text strong>Total Cost:</Text> $
+                        <Text strong>Total Cost:</Text> Rs.
                         {report.summary.totalCost.toFixed(2)}
                       </li>
                       <li>
@@ -1079,7 +1082,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
                               : "text-red-600"
                           }
                         >
-                          ${report.summary.totalProfit.toFixed(2)}
+                          Rs.{report.summary.totalProfit.toFixed(2)}
                         </Text>
                       </li>
                       <li>
@@ -1093,7 +1096,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
                               : "text-red-600"
                           }
                         >
-                          {report.summary.grossProfitMargin.toFixed(2)}%
+                          {report?.summary?.grossProfitMargin?.toFixed(2)}%
                         </Text>
                       </li>
                     </ul>
@@ -1142,7 +1145,7 @@ const ProfitReportComponent = ({ stores = [] }) => {
                       <ul className="list-disc pl-5 space-y-2">
                         {report.topPerformers.products.map((product, index) => (
                           <li key={index}>
-                            <Text strong>{product.productName}</Text>: $
+                            <Text strong>{product.productName}</Text>: Rs.
                             {product.profit.toFixed(2)} profit (
                             {product.profitMargin.toFixed(2)}% margin)
                           </li>

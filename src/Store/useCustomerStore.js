@@ -8,6 +8,7 @@ const useCustomerStore = create((set, get) => ({
   customers: [],
   customer: null,
   loading: false,
+  prescriptionData: null,
   error: null,
   pagination: {
     total: 0,
@@ -46,6 +47,125 @@ const useCustomerStore = create((set, get) => ({
       throw error;
     }
   },
+
+  downloadPrescription: async (customerId, prescriptionId) => {
+    try {
+      set({ loading: true, error: null });
+      const token = useAuthStore.getState().token;
+
+      // Make an API call to the backend to get the prescription file
+      const response = await axios.get(
+        `/customer/customers/${customerId}/prescriptions/${prescriptionId}/view`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          responseType: "blob", // Treat the response as a binary Blob
+        }
+      );
+      console.log(response.data);
+      // Create a URL for the blob
+      const blob = new Blob([response.data]);
+      const objectUrl = window.URL.createObjectURL(blob);
+      console.log(objectUrl);
+      // Get the content type to determine how to display it
+      const contentType = response.headers["content-type"] || "";
+
+      const getFilenameFromHeader = (contentDisposition) => {
+        if (!contentDisposition) return null;
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        return filenameMatch && filenameMatch[1] ? filenameMatch[1] : null;
+      };
+
+      // Store the prescription data in the store state
+      set({
+        loading: false,
+        prescriptionData: {
+          url: objectUrl,
+          contentType: contentType,
+          filename:
+            getFilenameFromHeader(response.headers["content-disposition"]) ||
+            "prescription",
+          customerId: customerId,
+          prescriptionId: prescriptionId,
+        },
+      });
+
+      return objectUrl;
+    } catch (error) {
+      set({
+        loading: false,
+        error: error.response?.data?.message || "Failed to view prescription",
+      });
+      throw error;
+    }
+  },
+
+  // Prepare prescription for viewing on a separate page
+  getPrescriptionViewUrl: (customerId, prescriptionId) => {
+    return `/prescriptions/view/${customerId}/${prescriptionId}`;
+  },
+
+  // Helper function to extract filename from content-disposition header
+
+  // downloadPrescription: async (customerId, prescriptionId) => {
+  //   try {
+  //     set({ loading: true, error: null });
+  //     const token = useAuthStore.getState().token;
+  //     console.log("-------------------Calling---------------");
+  //     // Make an API call to the backend to download the prescription
+  //     const response = await axios.get(
+  //       `/customer/customers/${customerId}/prescriptions/${prescriptionId}/download`,
+  //       {
+  //         headers: {
+  //           "Content-Type": "application/json",
+  //           Authorization: `Bearer ${token}`,
+  //         },
+  //         responseType: "blob", // Ensures the response is treated as a binary Blob
+  //       }
+  //     );
+  //     console.log("----------------------Called---------------");
+  //     console.log(response);
+  //     // Create a URL for the blob
+  //     const blob = new Blob([response.data]);
+  //     const url = window.URL.createObjectURL(blob);
+  //     console.log(blob);
+  //     console.log(url);
+  //     // Create a temporary anchor element to trigger download
+  //     const a = document.createElement("a");
+  //     a.style.display = "none";
+  //     a.href = url;
+
+  //     // Get the filename from the content-disposition header, or use a default name
+  //     const contentDisposition = response.headers["content-disposition"];
+  //     let filename = "prescription.pdf";
+
+  //     if (contentDisposition) {
+  //       const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+  //       if (filenameMatch && filenameMatch[1]) {
+  //         filename = filenameMatch[1];
+  //       }
+  //     }
+
+  //     a.download = filename;
+  //     document.body.appendChild(a);
+  //     a.click();
+
+  //     // Clean up
+  //     window.URL.revokeObjectURL(url);
+  //     document.body.removeChild(a);
+
+  //     set({ loading: false });
+  //     return true;
+  //   } catch (error) {
+  //     set({
+  //       loading: false,
+  //       error:
+  //         error.response?.data?.message || "Failed to download prescription",
+  //     });
+  //     throw error;
+  //   }
+  // },
 
   // Get customer by ID
   getCustomerById: async (id) => {

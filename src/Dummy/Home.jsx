@@ -55,7 +55,7 @@ const Home = () => {
   const quantityInputRef = useRef(null);
   const cartQuantityInputRef = useRef(null);
   const store = JSON.parse(localStorage.getItem("store-storage"));
-  const firstStore = store?.state?.stores?.data?.[0];
+  const firstStore = store?.state?.stores[0];
 
   // Fetch products on component mount
   useEffect(() => {
@@ -240,7 +240,7 @@ const Home = () => {
           ) *
           (1 - createdSale.discount / 100),
 
-        cashierName: firstStore?.owner?.firstName || "Cashier",
+        cashierName: firstStore?.staff[0]?.firstName || "Cashier",
       };
 
       // Set completed sale data and show print modal

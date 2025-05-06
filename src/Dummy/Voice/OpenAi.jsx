@@ -57,6 +57,7 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
   // Add these state variables at the top of your component
   const [ActualprintModalVisible, setActualPrintModalVisible] = useState(false);
   const [completedSaleData, setCompletedSaleData] = useState(null);
+  const [storeData, setStoreData] = useState(null);
 
   // Add this function to handle closing the receipt modal
   const handleCloseReceiptModal = () => {
@@ -66,7 +67,7 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
   const { products, fetchProducts } = useProductStore();
   const { createSale } = useSaleStore();
   const { user } = useAuthStore();
-
+  console.log(user);
   // Refs for speech recognition and state management
   const recognitionRef = useRef(null);
   const commandProcessingRef = useRef(false);
@@ -113,14 +114,17 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
     voiceEnabledRef.current = voiceEnabled;
     autoRestartRef.current = autoRestart;
     searchResultsRef.current = searchResults;
-    cartRef.current = cart;
+    cartRef.current = [...cart]; // Create a new copy to ensure ref is updated
     quantitiesRef.current = quantities;
     printModalVisibleRef.current = printModalVisible;
+
+    console.log("Cart state updated - Length:", cart.length);
+    console.log("CartRef updated - Length:", cartRef.current.length);
   }, [
     voiceEnabled,
     autoRestart,
     searchResults,
-    cart,
+    cart, // This dependency is important
     quantities,
     printModalVisible,
   ]);
@@ -167,6 +171,12 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
     setQuantities(newQuantities);
     setSelectedBatches(newSelectedBatches);
   }, [searchResults]);
+
+  useEffect(() => {
+    cartRef.current = [...cart]; // Create a new copy to ensure ref is updated
+    console.log("Cart state updated - Length:", cart.length);
+    console.log("CartRef updated - Length:", cartRef.current.length);
+  }, [cart]); // This dependency is crucial
 
   // Function to setup speech recognition
   const setupSpeechRecognition = () => {
@@ -317,6 +327,8 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
   };
 
   const correctWithOpenAI = async (rawCommand) => {
+    const productNames = products.map((p) => p.name.toLowerCase()).join(", ");
+    console.log(productNames);
     try {
       const response = await fetch(
         "https://api.openai.com/v1/chat/completions",
@@ -331,15 +343,62 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
             messages: [
               {
                 role: "system",
-                content: `You are a voice command processor for a pharmacy POS system. 
-        Correct any misheard commands and return ONLY the corrected command 
-        with no additional text or explanation. 
-        Common commands include: "search for [medicine name]", "add to cart", 
-        "add [quantity] to cart", "add [quantity] [medicine name]",
-        "remove from cart", "select [number]", "print bill", "clear cart", "complete sale", "close".
-        Common medicines include: panadol, xarelto, aspirin, puldol, carisef, etc.
-                      Hey one more common error is treadmill treate it as print bill
-                      `,
+                content: `
+  You are a voice command processor for a pharmacy POS system.
+  
+  Your job is to correct misheard voice commands and return ONLY the corrected command without any explanation or extra text.
+  
+  Correct for spelling, grammar, and recognition errors. Keep the structure and intent intact. Respond in lowercase.
+  
+  ### Available Commands:
+  
+  **Search Commands**
+  - "search for [medicine name]"
+  - "search [medicine name]"
+  
+  **Selection Commands**
+  - "select [number]"
+  - "select one"
+  
+  **Add to Cart Commands**
+  - "add to cart"
+  - "add item"
+  - "add [quantity] to cart"
+  - "add [quantity] items to cart"
+  - "add [quantity] pieces to cart"
+  - "add [quantity] [medicine name]"
+  
+  **Remove from Cart Commands**
+  - "remove from cart"
+  - "remove [medicine name]"
+  
+  **Cart Management Commands**
+  - "clear cart"
+  - "empty cart"
+  
+  **Checkout Commands**
+  - "print bill"
+  - "checkout"
+  - "complete sale"
+  - "complete"
+  
+  **System Commands**
+  - "close"
+  - "exit"
+  - "quit"
+  
+  ### Common Medicine Names:
+  - ${productNames}
+  
+  ### Common Mistakes to Correct:
+  - "treadmill" → "print bill"
+  - "xarel two" → "xarelto"
+  - "zara dhol" → "xaradol"
+  - "can i search for panadole" → "search for panadol"
+  - "ad two panadol" → "add 2 panadol"
+  
+  Return only the corrected command (in lowercase), with no quotes or extra text.
+              `.trim(),
               },
               {
                 role: "user",
@@ -348,6 +407,7 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
             ],
             temperature: 0.3,
             max_tokens: 50,
+            stop: ["\n"], // stops after first line
           }),
         }
       );
@@ -368,6 +428,10 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
 
   const executeCommand = async (command) => {
     const lowerCommand = command.toLowerCase().trim();
+
+    console.log("Command received:", lowerCommand);
+    console.log("Current cart state (length):", cart.length);
+    console.log("Current cart ref state (length):", cartRef.current.length);
 
     // Search command
     if (lowerCommand.includes("search")) {
@@ -526,27 +590,57 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
     }
 
     // Complete sale command - FIXED: Use ref instead of state for check
+    // if (lowerCommand.includes("complete sale") || lowerCommand === "complete") {
+    //   if (printModalVisibleRef.current) {
+    //     handleCompleteSale();
+    //     message.success("Sale completed");
+    //   } else {
+    //     message.error(
+    //       "Please open the checkout first with 'print bill' command"
+    //     );
+    //   }
+    //   return;
+    // }
+
+    // Replace the "complete sale" command handling in the executeCommand function
+    // Find this section in the executeCommand function:
+
+    // Complete sale command - FIXED: Use ref instead of state for check
+    // Complete sale command
     if (lowerCommand.includes("complete sale") || lowerCommand === "complete") {
-      if (printModalVisibleRef.current) {
+      // Always use the latest cart state
+      if (!cart || cart.length === 0) {
+        // Double check cartRef as a fallback
+        if (!cartRef.current || cartRef.current.length === 0) {
+          message.error("Cart is empty. Nothing to complete.");
+          return;
+        }
+        // If cart state is empty but cartRef has items, sync them
+        setCart([...cartRef.current]);
+        setTimeout(() => {
+          if (mountedRef.current) {
+            handleCompleteSale();
+            message.success("Sale completed");
+          }
+        }, 300);
+        return;
+      }
+
+      if (!printModalVisibleRef.current) {
+        // If print modal isn't visible, open it first
+        setPrintModalVisible(true);
+        // Wait for the modal to appear and state to update
+        setTimeout(() => {
+          if (mountedRef.current) {
+            handleCompleteSale();
+            message.success("Sale completed");
+          }
+        }, 500);
+      } else {
+        // If print modal is already visible, just complete the sale
         handleCompleteSale();
         message.success("Sale completed");
-      } else {
-        message.error(
-          "Please open the checkout first with 'print bill' command"
-        );
       }
-      return;
-    }
-
-    // Close command
-    if (
-      lowerCommand.includes("close") ||
-      lowerCommand.includes("exit") ||
-      lowerCommand.includes("quit")
-    ) {
-      setVoiceEnabled(false);
-      cleanupSpeechRecognition();
-      message.info("Voice assistant disabled");
       return;
     }
 
@@ -705,22 +799,24 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
       return;
     }
 
+    // Update with a functional state update that maintains state integrity
     setCart((prevCart) => {
       // Check if this exact product+batch combination already exists in cart
       const existingItemIndex = prevCart.findIndex(
         (item) => item.productId === product._id && item.batchId === batch._id
       );
 
+      let updatedCart;
       if (existingItemIndex >= 0) {
         // Update existing item
-        const updatedCart = [...prevCart];
+        updatedCart = [...prevCart];
         const existingItem = updatedCart[existingItemIndex];
 
         // Check if the new total quantity exceeds available stock
         const newQuantity = existingItem.quantity + safeQuantity;
         if (newQuantity > batch.currentStock) {
           message.error(`Cannot add more. Total would exceed available stock.`);
-          return prevCart;
+          return prevCart; // Return unchanged cart
         }
 
         updatedCart[existingItemIndex] = {
@@ -728,11 +824,9 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
           quantity: newQuantity,
           subtotal: existingItem.unitPrice * newQuantity,
         };
-
-        return updatedCart;
       } else {
         // Add new item to cart
-        return [
+        updatedCart = [
           ...prevCart,
           {
             productId: product._id,
@@ -747,6 +841,10 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
           },
         ];
       }
+
+      // Also update cartRef for immediate access in voice commands
+      cartRef.current = updatedCart;
+      return updatedCart;
     });
   };
 
@@ -761,62 +859,490 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
       if (existingItemIndex === -1) return prevCart;
 
       const existingItem = prevCart[existingItemIndex];
+      let updatedCart;
 
       if (existingItem.quantity > 1) {
         // Reduce quantity by 1
-        const updatedCart = [...prevCart];
+        updatedCart = [...prevCart];
         updatedCart[existingItemIndex] = {
           ...existingItem,
           quantity: existingItem.quantity - 1,
           subtotal: existingItem.unitPrice * (existingItem.quantity - 1),
         };
-        return updatedCart;
       } else {
         // Remove item completely
-        return prevCart.filter((_, index) => index !== existingItemIndex);
+        updatedCart = prevCart.filter(
+          (_, index) => index !== existingItemIndex
+        );
       }
+
+      // Also update cartRef for immediate access
+      cartRef.current = updatedCart;
+      return updatedCart;
     });
   };
 
+  useEffect(() => {
+    const store = localStorage.getItem("store-storage");
+
+    if (store) {
+      try {
+        const parsedStore = JSON.parse(store);
+        setStoreData(parsedStore.state?.currentStore);
+      } catch (error) {
+        console.error("Failed to parse store-storage:", error);
+      }
+    } else {
+      console.log("No store-storage found in localStorage.");
+    }
+  }, []);
+
+  // Replace the handleCompleteSale function with this improved version:
+
   const handleCompleteSale = async () => {
     try {
+      console.log(
+        "handleCompleteSale called - Current cart state:",
+        cart.length
+      );
+      console.log("Current cart ref state:", cartRef.current.length);
+
       if (!user?.id) {
         message.error("Staff member information missing");
         return;
       }
 
+      // First check cart state
+      let saleItems = [];
+      if (cart && cart.length > 0) {
+        saleItems = [...cart];
+      }
+      // If cart state is empty, check cartRef as fallback
+      else if (cartRef.current && cartRef.current.length > 0) {
+        saleItems = [...cartRef.current];
+        // Also sync back to state for consistency
+        setCart(saleItems);
+      }
+      // Both are empty, can't proceed
+      else {
+        console.error("Sale completion attempted with empty cart");
+        message.error("Cannot complete sale with empty cart");
+        return;
+      }
+
+      console.log(`Preparing sale with ${saleItems.length} items`);
+
+      // Calculate totals based on the selected items
+      const saleSubtotal = saleItems.reduce(
+        (sum, item) => sum + item.unitPrice * item.quantity,
+        0
+      );
+      const saleTax = 0; // Or your tax calculation
+      const saleTotal = saleSubtotal + saleTax;
+
       // Prepare sale data according to schema
       const saleData = {
         invoiceNumber,
-        items: cart.map((item) => ({
+        items: saleItems.map((item) => ({
           product: item.productId,
           batch: item.batchId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           discount: item.discount || 0,
           subtotal: item.subtotal,
+          productName: item.productName, // Add this for the receipt
         })),
-        subtotal: cartTotal,
-        tax: taxAmount,
-        total: totalWithTax,
+        subtotal: saleSubtotal,
+        tax: saleTax,
+        total: saleTotal,
         payment: {
           method: paymentMethod,
           status: "completed",
         },
-        staffMember: user._id,
+        staffMember: user.id,
+        staffMemberName: user.firstName,
       };
+      const store = localStorage.getItem("store-storage");
 
+      if (store) {
+        const parsedStore = JSON.parse(store);
+        console.log(parsedStore.state?.currentStore);
+        const storeData = parsedStore.state?.currentStore;
+      } else {
+        console.log("No store found in localStorage");
+      }
+
+      console.log(storeData);
+      console.log("Submitting sale with items:", saleData.items.length);
+      console.log(saleData);
+      // Create the sale
       await createSale(saleData);
+
       message.success("Sale completed successfully!");
       setPrintModalVisible(false);
+      console.log("----------------------------------------");
+      console.log(completedSaleData);
+      console.log("----------------------------------------");
+      // DIRECT PRINT: Skip showing the receipt modal and directly print
+      printReceipt(saleData, invoiceNumber, storeData);
 
-      setCompletedSaleData(saleData);
-      setActualPrintModalVisible(true);
-
+      // Clear the cart after successful sale
       setCart([]);
+      // Also clear cartRef to maintain sync
+      cartRef.current = [];
     } catch (error) {
       console.error("Error completing sale:", error);
-      message.error("Failed to complete sale");
+      message.error(
+        `Failed to complete sale: ${error.message || "Unknown error"}`
+      );
+    }
+  };
+
+  // New function to handle direct printing
+  const printReceipt = (saleData, invoiceNumber, storeData) => {
+    try {
+      // Create an invisible iframe for printing instead of opening a new window
+      const printFrame = document.createElement("iframe");
+      printFrame.style.position = "fixed";
+      printFrame.style.right = "0";
+      printFrame.style.bottom = "0";
+      printFrame.style.width = "0";
+      printFrame.style.height = "0";
+      printFrame.style.border = "0";
+      document.body.appendChild(printFrame);
+
+      // Helper function to format currency
+      const formatCurrency = (amount) => {
+        return `Rs. ${parseFloat(amount).toFixed(2)}`;
+      };
+
+      // Helper function to format date in a more readable way
+      const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      };
+
+      // Current date and time
+      const now = new Date();
+      const dateString = now.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+      const timeString = now.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      // Get document from iframe
+      const doc = printFrame.contentWindow.document;
+
+      // Get staff name from staffMemberName or find it in storeData
+      let staffName = saleData.staffMemberName || "Staff";
+      if (!staffName && storeData?.staff && saleData.staffMember) {
+        const staffMember = storeData.staff.find(
+          (s) => s._id === saleData.staffMember
+        );
+        if (staffMember) {
+          staffName = `${staffMember.firstName} ${staffMember.lastName}`;
+        }
+      }
+
+      // Write thermal printer optimized receipt with enhanced styling
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="UTF-8">
+            <title>Receipt ${invoiceNumber}</title>
+            <style>
+              /* Enhanced thermal printer optimized styles for XP-C260K */
+              body {
+                font-family: 'Courier New', monospace;
+                width: 80mm; /* Standard thermal paper width for XP-C260K */
+                margin: 0;
+                padding: 10px 5px;
+                font-size: 12px;
+                color: black;
+                line-height: 1.2;
+              }
+              .header {
+                text-align: center;
+                margin-bottom: 10px;
+              }
+              .logo {
+                font-size: 24px;
+                font-weight: bold;
+                margin: 0;
+                letter-spacing: 2px;
+                padding: 5px 0;
+                border-bottom: 1px solid #000;
+                border-top: 1px solid #000;
+              }
+              .store-name {
+                font-size: 20px;
+                font-weight: bold;
+                margin: 5px 0;
+              }
+              .store-info {
+                margin: 3px 0;
+                font-size: 11px;
+              }
+              .divider {
+                border-top: 1px dashed #000;
+                margin: 8px 0;
+              }
+              .thick-divider {
+                border-top: 2px solid #000;
+                margin: 8px 0;
+              }
+              .receipt-title {
+                text-align: center;
+                font-size: 16px;
+                font-weight: bold;
+                margin: 8px 0;
+                padding: 4px;
+                border: 1px solid #000;
+                border-left: none;
+                border-right: none;
+              }
+              .invoice-details {
+                margin: 10px 0;
+              }
+              .invoice-details .row {
+                display: flex;
+                justify-content: space-between;
+                margin: 3px 0;
+              }
+              .invoice-details .label {
+                font-weight: bold;
+              }
+              table {
+                width: 100%;
+                border-collapse: collapse;
+              }
+              table th {
+                text-align: left;
+                font-size: 12px;
+                padding: 4px 0;
+                font-weight: bold;
+              }
+              table td {
+                font-size: 12px;
+                padding: 3px 0;
+              }
+              .item-row td {
+                vertical-align: top;
+              }
+              .total-section {
+                margin-top: 8px;
+                text-align: right;
+              }
+              .total-section .row {
+                display: flex;
+                justify-content: flex-end;
+                margin: 3px 0;
+              }
+              .total-section .label {
+                margin-right: 12px;
+                font-weight: bold;
+                min-width: 80px;
+                text-align: right;
+              }
+              .total-section .value {
+                min-width: 80px;
+                text-align: right;
+              }
+              .total-line {
+                font-weight: bold;
+                font-size: 16px;
+              }
+              .total-box {
+                border: 2px solid #000;
+                padding: 5px;
+                display: inline-block;
+                margin-top: 5px;
+              }
+              .footer {
+                margin-top: 15px;
+                text-align: center;
+                font-size: 11px;
+              }
+              .thank-you {
+                font-size: 14px;
+                font-weight: bold;
+                margin: 8px 0;
+              }
+              .barcode {
+                text-align: center;
+                margin: 12px 0;
+                font-family: 'Liberation Mono', monospace;
+                letter-spacing: -1px;
+                font-size: 14px;
+                padding: 8px 0;
+                border-top: 1px solid #000;
+                border-bottom: 1px solid #000;
+              }
+              .item-name {
+                font-weight: bold;
+              }
+              .header-decoration {
+                font-size: 16px;
+                letter-spacing: 5px;
+                padding: 3px 0;
+              }
+              @media print {
+                body {
+                  width: 100%;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="header-decoration">************</div>
+              <div class="logo">
+                ${storeData?.name?.toUpperCase() || "PHARMACY"}
+              </div>
+              <p class="store-info">${
+                storeData?.licenseNumber
+                  ? `License: ${storeData.licenseNumber}`
+                  : ""
+              }</p>
+              <p class="store-info">${storeData?.phoneNumber || ""}</p>
+              <p class="store-info">${storeData?.email || ""}</p>
+              <div class="header-decoration">************</div>
+            </div>
+            
+            <div class="receipt-title">SALES RECEIPT</div>
+            
+            <div class="invoice-details">
+              <div class="row">
+                <span class="label">Invoice #:</span>
+                <span>${invoiceNumber}</span>
+              </div>
+              <div class="row">
+                <span class="label">Date:</span>
+                <span>${dateString} ${timeString}</span>
+              </div>
+              <div class="row">
+                <span class="label">Staff:</span>
+                <span>${staffName}</span>
+              </div>
+              <div class="row">
+                <span class="label">Payment:</span>
+                <span>${
+                  saleData.payment?.method?.toUpperCase() || "CASH"
+                }</span>
+              </div>
+            </div>
+            
+            <div class="thick-divider"></div>
+            
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 50%">ITEM</th>
+                  <th style="width: 10%">QTY</th>
+                  <th style="width: 20%">PRICE</th>
+                  <th style="width: 20%">AMOUNT</th>
+                </tr>
+              </thead>
+            </table>
+            
+            <div class="divider"></div>
+            
+            <table>
+              <tbody>
+                ${saleData.items
+                  .map(
+                    (item) => `
+                  <tr class="item-row">
+                    <td style="width: 50%" class="item-name">${
+                      item.productName
+                    }</td>
+                    <td style="width: 10%">${item.quantity}</td>
+                    <td style="width: 20%">${formatCurrency(
+                      item.unitPrice
+                    )}</td>
+                    <td style="width: 20%">${formatCurrency(
+                      item.unitPrice * item.quantity
+                    )}</td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+            
+            <div class="thick-divider"></div>
+            
+            <div class="total-section">
+              <div class="row">
+                <span class="label">Subtotal:</span>
+                <span class="value">${formatCurrency(saleData.subtotal)}</span>
+              </div>
+              ${
+                saleData.tax > 0
+                  ? `
+              <div class="row">
+                <span class="label">Tax:</span>
+                <span class="value">${formatCurrency(saleData.tax)}</span>
+              </div>
+              `
+                  : ""
+              }
+              <div class="divider"></div>
+              <div class="row total-line">
+                <span class="label">TOTAL:</span>
+                <span class="value total-box">${formatCurrency(
+                  saleData.total
+                )}</span>
+              </div>
+            </div>
+            
+            <div class="thick-divider"></div>
+            
+            <!-- Enhanced barcode representation -->
+            <div class="barcode">
+              ||| || ||| | || |||
+              ${invoiceNumber}
+            </div>
+            
+            <div class="footer">
+              <p class="thank-you">Thank you for your purchase!</p>
+              <p>For returns or exchanges, please present</p>
+              <p>this receipt within 7 days.</p>
+              <div class="divider"></div>
+              <p>${new Date().toISOString().split("T")[0]}</p>
+            </div>
+          </body>
+        </html>
+      `);
+
+      // Close the document and focus on the frame
+      doc.close();
+      printFrame.contentWindow.focus();
+
+      // Print after a short delay to ensure content is loaded
+      setTimeout(() => {
+        printFrame.contentWindow.print();
+
+        // Remove the iframe after printing (delayed to ensure print completes)
+        setTimeout(() => {
+          document.body.removeChild(printFrame);
+        }, 1000);
+      }, 500);
+
+      return true;
+    } catch (error) {
+      console.error("Error printing receipt:", error);
+      alert("There was an error printing the receipt. Please try again.");
+      return false;
     }
   };
 
@@ -1315,8 +1841,8 @@ const PharmacyPOSModal = ({ visible, onClose }) => {
             >
               <Option value="cash">Cash</Option>
               <Option value="card">Credit/Debit Card</Option>
-              <Option value="insurance">Insurance</Option>
-              <Option value="mobile">Mobile Payment</Option>
+              {/* <Option value="insurance">Insurance</Option> */}
+              <Option value="mobileBanking">Mobile Payment</Option>
             </Select>
           </div>
         </div>

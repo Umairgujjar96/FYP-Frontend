@@ -21,8 +21,8 @@ export const useReturnStore = create((set, get) => ({
       const storeId = useAuthStore.getState().currentStore?.id;
 
       const url = storeId
-        ? `${BaseUrl}/api/sales/invoice/${invoiceNumber}?storeId=${storeId}`
-        : `${BaseUrl}/api/sales/invoice/${invoiceNumber}`;
+        ? `${BaseUrl}/api/sales/sales/invoice/${invoiceNumber}?storeId=${storeId}`
+        : `${BaseUrl}/api/sales/sales/invoice/${invoiceNumber}`;
 
       const response = await axios.get(url, {
         headers: {
@@ -182,7 +182,7 @@ export const useReturnStore = create((set, get) => ({
       }
 
       const response = await axios.post(
-        `${BaseUrl}/api/sales/return`,
+        `${BaseUrl}/api/sales/sales/return`,
         payload,
         {
           headers: {
